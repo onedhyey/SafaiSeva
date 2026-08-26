@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Download, Check, X, Share } from 'lucide-react';
+import { SafaiSevaLogo } from './SafaiSevaLogo';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -88,7 +89,15 @@ export const InstallAppFooter: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-sm bg-zinc-900 border border-zinc-700/80 rounded-xl p-5 text-left text-zinc-200 shadow-2xl">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-white">Add SafaiSeva to Home Screen</h3>
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-zinc-950 border border-emerald-500/30 flex items-center justify-center shadow-inner shrink-0 overflow-hidden">
+                  <SafaiSevaLogo size={24} color="#10B981" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-white leading-tight">SafaiSeva</h3>
+                  <p className="text-[10px] font-mono text-emerald-400">Add to Home Screen</p>
+                </div>
+              </div>
               <button
                 onClick={() => setShowIosModal(false)}
                 className="text-zinc-400 hover:text-white p-1 rounded-md hover:bg-zinc-800 transition-colors"
