@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <script>
+      (function() {
+        try {
+          var origFetch = (typeof window !== 'undefined' && window.fetch) ? window.fetch.bind(window) : null;
+          var customFetch = origFetch;
+          if (typeof window !== 'undefined') {
+            try {
+              Object.defineProperty(window, 'fetch', {
+                get: function() { return customFetch || origFetch; },
+                set: function(val) { customFetch = val; },
+                configurable: true,
+                enumerable: true
+              });
+            } catch (err) {}
+          }
+          if (typeof globalThis !== 'undefined' && globalThis !== window) {
+            try {
+              Object.defineProperty(globalThis, 'fetch', {
+                get: function() { return customFetch || origFetch; },
+                set: function(val) { customFetch = val; },
+                configurable: true,
+                enumerable: true
+              });
+            } catch (err) {}
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>SafaiSeva — Ahmedabad Civic Waste Reward</title>
+    <meta name="description" content="Civic reward app for Ahmedabad waste segregation verification and public transit rewards." />
+    <meta name="theme-color" content="#0F1F17" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="SafaiSeva" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body class="bg-ink text-ink select-none antialiased">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch((err) => {
+            console.log('SW registration skipped in sandbox:', err);
+          });
+        });
+      }
+    </script>
+  </body>
+</html>
