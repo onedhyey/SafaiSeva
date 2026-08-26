@@ -1,0 +1,256 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-latin-400.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-latin-500.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-latin-600.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-latin-700.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans Devanagari';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-devanagari-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans Devanagari';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-devanagari-600.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-mono-latin-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-mono-latin-600.woff2') format('woff2');
+}
+
+:root, [data-theme="dark"], .dark {
+  --color-ink: #050505;
+  --color-ink-soft: #0e0e11;
+  --color-ink-card: #141418;
+  --color-green: #10b981;
+  --color-amber: #f59e0b;
+  --color-red: #ef4444;
+  --color-indigo: #6366f1;
+  --color-muted: #3f3f46;
+  --color-muted-l: #a1a1aa;
+  --color-tint: #f4f4f5;
+  --color-white: #ffffff;
+  --page-bg: #050505;
+  --page-text: #e0e0e0;
+}
+
+[data-theme="light"], .light {
+  --color-ink: #f1f4f2;
+  --color-ink-soft: #ffffff;
+  --color-ink-card: #f8fafc;
+  --color-green: #059669;
+  --color-amber: #d97706;
+  --color-red: #dc2626;
+  --color-indigo: #4f46e5;
+  --color-muted: #cbd5e1;
+  --color-muted-l: #64748b;
+  --color-tint: #0f172a;
+  --color-white: #0f172a;
+  --page-bg: #eef2ef;
+  --page-text: #0f172a;
+}
+
+@theme {
+  --color-ink: var(--color-ink);
+  --color-ink-soft: var(--color-ink-soft);
+  --color-ink-card: var(--color-ink-card);
+  --color-green: var(--color-green);
+  --color-amber: var(--color-amber);
+  --color-red: var(--color-red);
+  --color-indigo: var(--color-indigo);
+  --color-muted: var(--color-muted);
+  --color-muted-l: var(--color-muted-l);
+  --color-tint: var(--color-tint);
+  --color-white: var(--color-white);
+
+  --font-sans: 'IBM Plex Sans', 'IBM Plex Sans Devanagari', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+html, body {
+  font-family: var(--font-sans);
+  background-color: var(--page-bg);
+  color: var(--page-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: #09090b;
+}
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
+
+/* =========================================================================
+   LIGHT THEME OVERRIDES & CIVIC REFINEMENTS
+   ========================================================================= */
+.light ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+.light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+.light ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.light .bg-\[\#08080a\]\/95,
+.light .bg-\[\#08080a\],
+.light .bg-\[\#08080a\]\/90 {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+}
+
+.light .bg-zinc-900 {
+  background-color: #ffffff !important;
+}
+
+.light .bg-zinc-950 {
+  background-color: #f8fafc !important;
+}
+
+.light .bg-zinc-800 {
+  background-color: #f1f5f9 !important;
+}
+
+.light .hover\:bg-zinc-900:hover {
+  background-color: #f8fafc !important;
+}
+
+.light .hover\:bg-zinc-800:hover {
+  background-color: #e2e8f0 !important;
+}
+
+.light .hover\:bg-zinc-700:hover {
+  background-color: #cbd5e1 !important;
+}
+
+.light .border-zinc-800\/80,
+.light .border-zinc-800\/90,
+.light .border-zinc-800,
+.light .border-zinc-700\/80,
+.light .border-zinc-700\/60,
+.light .border-zinc-700 {
+  border-color: #e2e8f0 !important;
+}
+
+.light .border-ink-soft\/40 {
+  border-color: #cbd5e1 !important;
+}
+
+.light .text-zinc-400 {
+  color: #64748b !important;
+}
+
+.light .text-zinc-300 {
+  color: #334155 !important;
+}
+
+.light .text-zinc-200 {
+  color: #1e293b !important;
+}
+
+.light .text-zinc-100,
+.light .text-white {
+  color: #0f172a !important;
+}
+
+.light .bg-emerald-500\/10 {
+  background-color: rgba(5, 150, 105, 0.1) !important;
+}
+
+.light .border-emerald-500\/30 {
+  border-color: rgba(5, 150, 105, 0.3) !important;
+}
+
+.light .border-emerald-500\/20 {
+  border-color: rgba(5, 150, 105, 0.25) !important;
+}
+
+.light .text-emerald-400 {
+  color: #059669 !important;
+}
+
+/* Specific exceptions for action buttons where text should stay white */
+.light .bg-emerald-500,
+.light .bg-green {
+  background-color: #059669 !important;
+}
+
+.light .bg-emerald-500.text-black,
+.light .bg-green.text-ink,
+.light button.bg-emerald-500,
+.light a.bg-emerald-500 {
+  color: #ffffff !important;
+}
+
+.light .bg-black\/80 {
+  background-color: rgba(15, 23, 42, 0.5) !important;
+}
+
+.light .shadow-2xl {
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04) !important;
+}
