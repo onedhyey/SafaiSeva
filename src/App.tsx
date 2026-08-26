@@ -26,12 +26,15 @@ import {
   updateHandover,
 } from './lib/db';
 import { analyse } from './lib/verification';
+import { useAuth } from './lib/authContext';
 import { RoleSwitcher } from './components/RoleSwitcher';
 import { BottomNav, ResidentTab } from './components/BottomNav';
 import { InstallAppFooter } from './components/InstallAppFooter';
 import { SettingsModal } from './components/SettingsModal';
 import { TicketModal } from './components/TicketModal';
 import { HandoverDetailModal } from './components/HandoverDetailModal';
+import { LoginView } from './components/auth/LoginView';
+import { RoleSelectionModal } from './components/auth/RoleSelectionModal';
 import { WalletView } from './components/resident/WalletView';
 import { DocumentView } from './components/resident/DocumentView';
 import { AiAnalysisView } from './components/resident/AiAnalysisView';
@@ -41,7 +44,7 @@ import { KarmachariView } from './components/karmachari/KarmachariView';
 import { WardOfficerView } from './components/officer/WardOfficerView';
 
 export default function App() {
-  const [role, setRole] = useState<Role>('resident');
+  const { isSignedIn, selectedRole, setSelectedRole, user } = useAuth();
   const [residentTab, setResidentTab] = useState<ResidentTab>('wallet');
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -59,6 +62,7 @@ export default function App() {
 
   // Modal States
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [isRoleModalOpen, setIsRoleModalOpen] = useState<boolean>(false);
   const [selectedTicket, setSelectedTicket] = useState<TicketRecord | null>(null);
   const [selectedHandover, setSelectedHandover] = useState<HandoverRecord | null>(null);
 
@@ -120,7 +124,7 @@ export default function App() {
 
   // Handle Role Switch
   const handleRoleChange = (newRole: Role) => {
-    setRole(newRole);
+    setSelectedRole(newRole);
     setActiveAnalysis(null);
   };
 
@@ -150,7 +154,7 @@ export default function App() {
     const newHandover: HandoverRecord = {
       id: `HND-NV-${dateStr.replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`,
       householdId: household.id,
-      householdName: household.name,
+      householdName: user?.fullName || household.name,
       ward: household.ward,
       timestamp: now.toISOString(),
       dateString: dateStr,
@@ -217,100 +221,121 @@ export default function App() {
     );
   }
 
+  // Active display household adapting with logged in user name if available
+  const activeHousehold: HouseholdProfile = {
+    ...household,
+    name: user?.fullName || household.name,
+  };
+
+  const activeRole: Role = selectedRole || 'resident';
+
   return (
     <div className="min-h-screen bg-ink text-tint flex flex-col items-center justify-start antialiased">
       {/* 390px Mobile Viewport Container */}
       <div className="w-full max-w-md min-h-screen flex flex-col bg-ink relative border-x border-ink-soft/40 shadow-2xl">
-        {/* Persistent Role Switcher Header */}
+        {/* Persistent Top Header with Auth & Role state */}
         <RoleSwitcher
-          currentRole={role}
+          currentRole={isSignedIn ? selectedRole : null}
           onRoleChange={handleRoleChange}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenRoleModal={() => setIsRoleModalOpen(true)}
+          currentTheme={currentTheme}
+          onToggleTheme={() => handleUpdateTheme(currentTheme === 'dark' ? 'light' : 'dark')}
         />
 
         {/* Main Content Area */}
-        <main className="flex-1 px-4 py-3 overflow-y-auto">
-          {/* Active AI Analysis View Overlay if submitting */}
-          {role === 'resident' && activeAnalysis ? (
-            <AiAnalysisView
-              photoUrl={activeAnalysis.photoUrl}
-              streams={activeAnalysis.streams}
-              location={activeAnalysis.location}
-              verificationResult={activeAnalysis.verificationResult}
-              currentBalance={activeAnalysis.currentBalance}
-              onComplete={() => {
-                setActiveAnalysis(null);
-                setResidentTab('wallet');
-              }}
-            />
+        <main className="flex-1 px-4 py-3 overflow-y-auto flex flex-col">
+          {!isSignedIn ? (
+            /* Logged Out: Welcome & Login Portal */
+            <LoginView />
           ) : (
+            /* Logged In: Role-specific screens */
             <>
-              {/* RESIDENT VIEWS */}
-              {role === 'resident' && (
+              {/* Active AI Analysis View Overlay if submitting */}
+              {activeRole === 'resident' && activeAnalysis ? (
+                <AiAnalysisView
+                  photoUrl={activeAnalysis.photoUrl}
+                  streams={activeAnalysis.streams}
+                  location={activeAnalysis.location}
+                  verificationResult={activeAnalysis.verificationResult}
+                  currentBalance={activeAnalysis.currentBalance}
+                  onComplete={() => {
+                    setActiveAnalysis(null);
+                    setResidentTab('wallet');
+                  }}
+                />
+              ) : (
                 <>
-                  {residentTab === 'wallet' && (
-                    <WalletView
-                      household={household}
+                  {/* RESIDENT VIEWS */}
+                  {activeRole === 'resident' && (
+                    <>
+                      {residentTab === 'wallet' && (
+                        <WalletView
+                          household={activeHousehold}
+                          handovers={handovers}
+                          onNavigateToDocument={() => setResidentTab('document')}
+                          onSelectHandover={(h) => setSelectedHandover(h)}
+                        />
+                      )}
+
+                      {residentTab === 'document' && (
+                        <DocumentView
+                          household={activeHousehold}
+                          onSubmit={handleDocumentSubmit}
+                          onCancel={() => setResidentTab('wallet')}
+                        />
+                      )}
+
+                      {residentTab === 'rewards' && (
+                        <RewardsView
+                          household={activeHousehold}
+                          tickets={tickets}
+                          onOpenTicketModal={(t) => setSelectedTicket(t)}
+                          onRefreshData={loadData}
+                        />
+                      )}
+
+                      {residentTab === 'impact' && (
+                        <ImpactView
+                          household={activeHousehold}
+                          wardStats={wardStats}
+                          handovers={handovers}
+                        />
+                      )}
+                    </>
+                  )}
+
+                  {/* KARMACHARI VIEW */}
+                  {activeRole === 'karmachari' && (
+                    <KarmachariView
+                      karmachari={karmachari}
                       handovers={handovers}
-                      onNavigateToDocument={() => setResidentTab('document')}
-                      onSelectHandover={(h) => setSelectedHandover(h)}
-                    />
-                  )}
-
-                  {residentTab === 'document' && (
-                    <DocumentView
-                      household={household}
-                      onSubmit={handleDocumentSubmit}
-                      onCancel={() => setResidentTab('wallet')}
-                    />
-                  )}
-
-                  {residentTab === 'rewards' && (
-                    <RewardsView
-                      household={household}
-                      tickets={tickets}
-                      onOpenTicketModal={(t) => setSelectedTicket(t)}
                       onRefreshData={loadData}
                     />
                   )}
 
-                  {residentTab === 'impact' && (
-                    <ImpactView
-                      household={household}
+                  {/* WARD OFFICER VIEW */}
+                  {activeRole === 'officer' && (
+                    <WardOfficerView
                       wardStats={wardStats}
                       handovers={handovers}
                     />
                   )}
                 </>
               )}
-
-              {/* KARMACHARI VIEW */}
-              {role === 'karmachari' && (
-                <KarmachariView
-                  karmachari={karmachari}
-                  handovers={handovers}
-                  onRefreshData={loadData}
-                />
-              )}
-
-              {/* WARD OFFICER VIEW */}
-              {role === 'officer' && (
-                <WardOfficerView
-                  wardStats={wardStats}
-                  handovers={handovers}
-                />
-              )}
             </>
           )}
         </main>
 
-        {/* Persistent PWA Install Control Footer */}
-        <div className={role === 'resident' && !activeAnalysis ? 'mb-14' : ''}>
-          <InstallAppFooter />
-        </div>
+        {/* Persistent PWA Install Control Footer (only when authenticated) */}
+        {isSignedIn && (
+          <div className={activeRole === 'resident' && !activeAnalysis ? 'mb-14' : ''}>
+            <InstallAppFooter />
+          </div>
+        )}
 
-        {/* Resident Bottom Nav (only on resident role when not in live analysis) */}
-        {role === 'resident' && !activeAnalysis && (
+        {/* Resident Bottom Nav (only on resident role when authenticated and not in live analysis) */}
+        {isSignedIn && activeRole === 'resident' && !activeAnalysis && (
           <BottomNav
             currentTab={residentTab}
             onTabChange={(tab) => setResidentTab(tab)}
@@ -318,11 +343,18 @@ export default function App() {
         )}
       </div>
 
+      {/* Post-Auth Role Selection Modal (shown automatically when signed in with no role, or on manual switch) */}
+      <RoleSelectionModal
+        isOpen={isSignedIn && (!selectedRole || isRoleModalOpen)}
+        onClose={() => setIsRoleModalOpen(false)}
+        canCancel={Boolean(selectedRole)}
+      />
+
       {/* Settings / Demo Control Modal */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
-        household={household}
+        household={activeHousehold}
         aiOverride={settings.aiOutcomeOverride}
         onUpdateOverride={handleUpdateOverride}
         theme={currentTheme}
@@ -347,3 +379,4 @@ export default function App() {
     </div>
   );
 }
+

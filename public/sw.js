@@ -1,13 +1,19 @@
-const CACHE_NAME = 'safaispot-v1';
+const CACHE_NAME = 'safaispot-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
+  '/manifest.json',
   '/favicon.svg',
+  '/favicon.ico',
+  '/icon-16.png',
+  '/icon-32.png',
   '/icon-192.png',
+  '/icon-384.png',
   '/icon-512.png',
   '/icon-512-maskable.png',
   '/apple-touch-icon.png',
+  '/apple-touch-icon-precomposed.png',
   '/fonts/ibm-plex-sans-latin-400.woff2',
   '/fonts/ibm-plex-sans-latin-500.woff2',
   '/fonts/ibm-plex-sans-latin-600.woff2',
