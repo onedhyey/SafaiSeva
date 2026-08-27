@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { X, Check, Search, ShieldCheck, AlertCircle } from 'lucide-react';
+import { X, Check, Search, ShieldCheck, AlertCircle, MapPin, Edit3 } from 'lucide-react';
 import { LeafGlyph } from '../LeafGlyph';
-import { HandoverRecord } from '../../types';
+import { HandoverRecord, LocationData } from '../../types';
 import { addHandover } from '../../lib/db';
 import { createBinPhotoSvg } from '../../lib/seed';
+import { LocationPickerModal } from '../LocationPickerModal';
 
 interface IssueCreditModalProps {
   isOpen: boolean;
@@ -24,6 +25,16 @@ export const IssueCreditModal: React.FC<IssueCreditModalProps> = ({
   const [selectedStreamDry, setSelectedStreamDry] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isLocationPickerOpen, setIsLocationPickerOpen] = useState<boolean>(false);
+  const [workerLocation, setWorkerLocation] = useState<LocationData>({
+    lat: 23.03842,
+    lng: 72.55918,
+    address: 'Navrangpura Ward 12 Doorstep Route (23.03842°N, 72.55918°E)',
+    isFallback: false,
+    ward: 'Ward 12 - Navrangpura',
+    accuracyMeters: 4,
+    source: 'gps',
+  });
 
   if (!isOpen) return null;
 
@@ -46,17 +57,12 @@ export const IssueCreditModal: React.FC<IssueCreditModalProps> = ({
       id: `HND-MANUAL-${Date.now()}-${householdId.replace(/[^a-zA-Z0-9]/g, '')}`,
       householdId: householdId.trim(),
       householdName: householdName.trim() || `AMC Household ${householdId.trim()}`,
-      ward: 'Ward 12 - Navrangpura',
+      ward: workerLocation.ward || 'Ward 12 - Navrangpura',
       timestamp: now.toISOString(),
       dateString: dateStr,
       photoUrl: createBinPhotoSvg(`Manual Worker Verification / ${workerId}`, true, '#19A85B'),
       imageHash: `manual_worker_hash_${Date.now()}`,
-      location: {
-        lat: 23.0384,
-        lng: 72.5592,
-        address: 'Direct Doorstep Worker Handover (Navrangpura)',
-        isFallback: false,
-      },
+      location: workerLocation,
       streamsConfirmed: {
         wet: selectedStreamWet,
         dry: selectedStreamDry,
@@ -178,6 +184,27 @@ export const IssueCreditModal: React.FC<IssueCreditModalProps> = ({
               </div>
             </div>
 
+            {/* Doorstep Location with Pen Icon */}
+            <div className="bg-zinc-950 p-2.5 rounded-lg border border-zinc-800 space-y-1.5 text-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-zinc-300 font-medium">
+                  <MapPin size={13} className="text-emerald-400 shrink-0" />
+                  <span className="text-[11px] uppercase tracking-wider font-mono text-zinc-400">Doorstep Location:</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsLocationPickerOpen(true)}
+                  className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-400 bg-emerald-950/60 hover:bg-emerald-950 border border-emerald-500/30 px-2 py-0.5 rounded-xs transition-colors cursor-pointer"
+                >
+                  <Edit3 size={11} />
+                  <span>Edit Map</span>
+                </button>
+              </div>
+              <div className="text-[11px] font-mono text-zinc-300 truncate">
+                {workerLocation.address}
+              </div>
+            </div>
+
             {/* Physical Check Toggles */}
             <div className="space-y-1.5">
               <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-wider">
@@ -231,6 +258,14 @@ export const IssueCreditModal: React.FC<IssueCreditModalProps> = ({
             </div>
           </form>
         )}
+
+        {/* Location Picker Modal */}
+        <LocationPickerModal
+          isOpen={isLocationPickerOpen}
+          onClose={() => setIsLocationPickerOpen(false)}
+          currentLocation={workerLocation}
+          onLocationSelected={(newLoc) => setWorkerLocation(newLoc)}
+        />
       </div>
     </div>
   );

@@ -329,12 +329,10 @@ export default function App() {
           )}
         </main>
 
-        {/* Persistent PWA Install Control Footer (only when authenticated) */}
-        {isSignedIn && (
-          <div className={activeRole === 'resident' && !activeAnalysis ? 'mb-14' : ''}>
-            <InstallAppFooter />
-          </div>
-        )}
+        {/* Persistent PWA Install Control Footer (Always visible across all states) */}
+        <div className={isSignedIn && activeRole === 'resident' && !activeAnalysis ? 'mb-14' : ''}>
+          <InstallAppFooter />
+        </div>
 
         {/* Resident Bottom Nav (only on resident role when authenticated and not in live analysis) */}
         {isSignedIn && activeRole === 'resident' && !activeAnalysis && (
