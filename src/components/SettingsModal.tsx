@@ -109,31 +109,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </button>
           </div>
 
-          {/* Standalone PWA Download Section */}
-          <div className="mt-3.5 bg-zinc-950 p-3 rounded-lg border border-zinc-800 flex items-center justify-between gap-2.5">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-emerald-950/80 border border-emerald-800/60 flex items-center justify-center text-emerald-400 shrink-0">
-                <Smartphone size={16} />
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs font-semibold text-white truncate">
-                  {isInstalled ? 'SafaiSeva App Installed' : 'Install Standalone App'}
+          {/* Standalone PWA Download Section (website only, hidden once installed) */}
+          {!isInstalled && (
+            <div className="mt-3.5 bg-zinc-950 p-3 rounded-lg border border-zinc-800 flex items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-emerald-950/80 border border-emerald-800/60 flex items-center justify-center text-emerald-400 shrink-0">
+                  <Smartphone size={16} />
                 </div>
-                <div className="text-[10px] text-zinc-400 font-mono truncate">
-                  {isInstalled ? 'Running with offline support' : 'Add to Home Screen / Desktop'}
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-white truncate">
+                    Install Standalone App
+                  </div>
+                  <div className="text-[10px] text-zinc-400 font-mono truncate">
+                    Add to Home Screen / Desktop
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <button
-              id="settings-download-app-btn"
-              onClick={triggerInstall}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs transition-all shrink-0 cursor-pointer shadow-xs"
-            >
-              {isInstalled ? <Check size={12} /> : <Download size={12} />}
-              <span>{isInstalled ? 'Guide' : 'Download App'}</span>
-            </button>
-          </div>
+              <button
+                id="settings-download-app-btn"
+                onClick={triggerInstall}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs transition-all shrink-0 cursor-pointer shadow-xs"
+              >
+                <Download size={12} />
+                <span>Download App</span>
+              </button>
+            </div>
+          )}
 
           {/* Theme Mode Selector */}
           <div className="mt-3.5">

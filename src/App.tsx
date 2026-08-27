@@ -329,7 +329,7 @@ export default function App() {
           )}
         </main>
 
-        {/* Persistent PWA Install Control Footer (Always visible across all states) */}
+        {/* PWA Install Control Footer (Website only, hidden automatically once installed as standalone app) */}
         <div className={isSignedIn && activeRole === 'resident' && !activeAnalysis ? 'mb-14' : ''}>
           <InstallAppFooter />
         </div>

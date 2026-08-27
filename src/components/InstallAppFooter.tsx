@@ -17,6 +17,11 @@ export const InstallAppFooter: React.FC<InstallAppFooterProps> = ({ className = 
     triggerInstall,
   } = usePwaInstall();
 
+  // If the app is already installed or running as standalone on homescreen, do not show the footer at all
+  if (isInstalled) {
+    return null;
+  }
+
   return (
     <>
       <footer
@@ -25,8 +30,12 @@ export const InstallAppFooter: React.FC<InstallAppFooterProps> = ({ className = 
       >
         <div className="max-w-md mx-auto flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-left min-w-0">
-            <div className="w-6 h-6 rounded-md bg-emerald-950/80 border border-emerald-800/60 flex items-center justify-center text-emerald-400 shrink-0">
-              <Smartphone size={13} />
+            <div className="w-6 h-6 rounded-md bg-zinc-950 border border-emerald-800/60 p-0.5 flex items-center justify-center shrink-0 overflow-hidden">
+              <img
+                src="/apple-touch-icon.png"
+                alt="Logo"
+                className="w-full h-full object-cover rounded-[3px]"
+              />
             </div>
             <div className="min-w-0">
               <div className="text-[11px] font-semibold text-zinc-200 truncate">
@@ -39,26 +48,14 @@ export const InstallAppFooter: React.FC<InstallAppFooterProps> = ({ className = 
           </div>
 
           <div className="shrink-0 flex items-center gap-1.5">
-            {isInstalled ? (
-              <button
-                id="installed-status-btn"
-                onClick={() => setShowInstallModal(true)}
-                title="SafaiSeva is installed as standalone app. Click for app settings & guide."
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-300 hover:text-white bg-emerald-950/70 hover:bg-emerald-900/80 px-3 py-1.5 rounded-lg border border-emerald-700/60 transition-colors shadow-xs cursor-pointer"
-              >
-                <Check size={13} className="text-emerald-400" />
-                <span>Installed</span>
-              </button>
-            ) : (
-              <button
-                id="download-as-app-footer-btn"
-                onClick={triggerInstall}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-950 hover:text-black bg-emerald-500 hover:bg-emerald-400 px-3.5 py-1.5 rounded-lg border border-emerald-400/80 transition-all shadow-sm shadow-emerald-950/30 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
-              >
-                <Download size={13} className="text-zinc-950" />
-                <span>Download as an App</span>
-              </button>
-            )}
+            <button
+              id="download-as-app-footer-btn"
+              onClick={triggerInstall}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-950 hover:text-black bg-emerald-500 hover:bg-emerald-400 px-3.5 py-1.5 rounded-lg border border-emerald-400/80 transition-all shadow-sm shadow-emerald-950/30 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+            >
+              <Download size={13} className="text-zinc-950" />
+              <span>Download as an App</span>
+            </button>
           </div>
         </div>
       </footer>

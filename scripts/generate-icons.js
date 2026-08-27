@@ -111,6 +111,12 @@ async function generateAll() {
     .png({ quality: 100, compressionLevel: 9 })
     .toFile(path.join(outDir, 'icon-192.png'));
 
+  // 4b. Maskable PWA Icon 192x192
+  const svg192Maskable = createSvg({ size: 192, isMaskable: true });
+  await sharp(Buffer.from(svg192Maskable))
+    .png({ quality: 100, compressionLevel: 9 })
+    .toFile(path.join(outDir, 'icon-192-maskable.png'));
+
   // 5. Apple Touch Icon 180x180 (iOS Home Screen)
   const svgApple = createSvg({ size: 180, isAppleTouch: true });
   await sharp(Buffer.from(svgApple))
@@ -142,6 +148,11 @@ async function generateAll() {
   await sharp(Buffer.from(svg72))
     .png({ quality: 100, compressionLevel: 9 })
     .toFile(path.join(outDir, 'icon-72.png'));
+
+  const svg48 = createSvg({ size: 48, isMaskable: false });
+  await sharp(Buffer.from(svg48))
+    .png({ quality: 100, compressionLevel: 9 })
+    .toFile(path.join(outDir, 'icon-48.png'));
 
   const svg32 = createSvg({ size: 32, isFavicon: true });
   await sharp(Buffer.from(svg32))

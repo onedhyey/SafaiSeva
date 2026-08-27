@@ -62,22 +62,24 @@ export const LoginView: React.FC = () => {
           Daily waste segregation verification, Green Leaf civic credits, and BRTS / Metro transit rewards.
         </p>
 
-        {/* Dedicated "Download as an App" action banner on login page */}
-        <button
-          id="login-view-download-app-btn"
-          onClick={triggerInstall}
-          className="mt-3.5 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-emerald-500/40 text-xs text-zinc-200 transition-all shadow-md hover:scale-[1.02] cursor-pointer"
-        >
-          <div className="w-5 h-5 rounded-md bg-emerald-950 flex items-center justify-center text-emerald-400 shrink-0">
-            {isInstalled ? <Check size={12} /> : <Download size={12} />}
-          </div>
-          <span className="font-semibold text-emerald-400">
-            {isInstalled ? 'SafaiSeva App Installed' : 'Download SafaiSeva as an App'}
-          </span>
-          <span className="text-[10px] font-mono text-zinc-400">
-            {isInstalled ? '(View Guide)' : '(Offline PWA)'}
-          </span>
-        </button>
+        {/* Dedicated "Download as an App" action banner on login page (only on website, hidden when installed/standalone) */}
+        {!isInstalled && (
+          <button
+            id="login-view-download-app-btn"
+            onClick={triggerInstall}
+            className="mt-3.5 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-emerald-500/40 text-xs text-zinc-200 transition-all shadow-md hover:scale-[1.02] cursor-pointer"
+          >
+            <div className="w-5 h-5 rounded-md bg-emerald-950 flex items-center justify-center text-emerald-400 shrink-0">
+              <Download size={12} />
+            </div>
+            <span className="font-semibold text-emerald-400">
+              Download SafaiSeva as an App
+            </span>
+            <span className="text-[10px] font-mono text-zinc-400">
+              (Offline PWA)
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Feature Highlights Grid */}
