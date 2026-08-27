@@ -22,9 +22,37 @@ if (typeof window !== 'undefined') {
   });
 }
 
+function checkIsStandalone(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const isStandaloneMQ = window.matchMedia?.('(display-mode: standalone)')?.matches;
+    const isFullscreenMQ = window.matchMedia?.('(display-mode: fullscreen)')?.matches;
+    const isMinimalUiMQ = window.matchMedia?.('(display-mode: minimal-ui)')?.matches;
+    const isWindowControlsMQ = window.matchMedia?.('(display-mode: window-controls-overlay)')?.matches;
+    const isIosStandalone = (window.navigator as unknown as { standalone?: boolean })?.standalone === true;
+    const isAndroidApp = typeof document !== 'undefined' && document.referrer?.includes('android-app://');
+    const urlParams = new URLSearchParams(window.location.search);
+    const isSourcePwa = urlParams.get('source') === 'pwa' || urlParams.get('mode') === 'standalone' || window.location.hash.includes('pwa');
+    const storedInstalled = localStorage.getItem('safai_pwa_installed') === 'true';
+
+    return Boolean(
+      isStandaloneMQ ||
+      isFullscreenMQ ||
+      isMinimalUiMQ ||
+      isWindowControlsMQ ||
+      isIosStandalone ||
+      isAndroidApp ||
+      isSourcePwa ||
+      storedInstalled
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function usePwaInstall() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(globalDeferredPrompt);
-  const [isInstalled, setIsInstalled] = useState<boolean>(false);
+  const [isInstalled, setIsInstalled] = useState<boolean>(() => checkIsStandalone());
   const [isIos, setIsIos] = useState<boolean>(false);
   const [showInstallModal, setShowInstallModal] = useState<boolean>(false);
 
@@ -34,14 +62,32 @@ export function usePwaInstall() {
     };
     listeners.add(updatePrompt);
 
-    // Check if running in standalone mode
-    const isStandalone =
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
-      document.referrer.includes('android-app://');
-
-    if (isStandalone) {
+    // Initial check and persistence
+    const standalone = checkIsStandalone();
+    if (standalone) {
       setIsInstalled(true);
+      try {
+        localStorage.setItem('safai_pwa_installed', 'true');
+      } catch {
+        // ignore
+      }
+    }
+
+    // Media query listeners for real-time display-mode transitions
+    const mqlStandalone = window.matchMedia?.('(display-mode: standalone)');
+    const handleMQChange = (e: MediaQueryListEvent) => {
+      if (e.matches) {
+        setIsInstalled(true);
+        try {
+          localStorage.setItem('safai_pwa_installed', 'true');
+        } catch {
+          // ignore
+        }
+      }
+    };
+
+    if (mqlStandalone?.addEventListener) {
+      mqlStandalone.addEventListener('change', handleMQChange);
     }
 
     // Detect iOS
@@ -53,6 +99,11 @@ export function usePwaInstall() {
 
     const handleAppInstalled = () => {
       setIsInstalled(true);
+      try {
+        localStorage.setItem('safai_pwa_installed', 'true');
+      } catch {
+        // ignore
+      }
       setDeferredPrompt(null);
       globalDeferredPrompt = null;
     };
@@ -61,6 +112,9 @@ export function usePwaInstall() {
 
     return () => {
       listeners.delete(updatePrompt);
+      if (mqlStandalone?.removeEventListener) {
+        mqlStandalone.removeEventListener('change', handleMQChange);
+      }
       window.removeEventListener('appinstalled', handleAppInstalled);
     };
   }, []);
@@ -72,6 +126,11 @@ export function usePwaInstall() {
         const choice = await globalDeferredPrompt.userChoice;
         if (choice.outcome === 'accepted') {
           setIsInstalled(true);
+          try {
+            localStorage.setItem('safai_pwa_installed', 'true');
+          } catch {
+            // ignore
+          }
         }
         globalDeferredPrompt = null;
         setDeferredPrompt(null);

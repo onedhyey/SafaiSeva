@@ -43,8 +43,15 @@ export const InstallModal: React.FC<InstallModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between mb-4 pb-3 border-b border-zinc-800">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-zinc-950 border border-emerald-500/30 flex items-center justify-center shadow-inner shrink-0">
-              <SafaiSevaLogo size={26} color="#10B981" />
+            <div className="w-11 h-11 rounded-xl bg-zinc-950 border border-emerald-500/40 p-0.5 flex items-center justify-center shadow-lg shadow-emerald-950/40 shrink-0 overflow-hidden">
+              <img
+                src="/apple-touch-icon.png"
+                alt="SafaiSeva App Icon"
+                className="w-full h-full object-cover rounded-[10px]"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
             </div>
             <div>
               <div className="flex items-center gap-1.5">

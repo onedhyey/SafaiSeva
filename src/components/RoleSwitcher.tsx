@@ -64,28 +64,22 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({
             </div>
           </div>
 
-          {/* Right Controls: Install App, Theme toggle, Login / Role & Profile, Settings */}
+          {/* Right Controls: Install App (website only), Theme toggle, Login / Role & Profile, Settings */}
           <div className="flex items-center gap-1.5">
-            {/* Always Visible Download as an App Quick Button in Header */}
-            <button
-              id="header-download-app-btn"
-              onClick={triggerInstall}
-              title={isInstalled ? 'SafaiSeva App Installed (Click for info)' : 'Download SafaiSeva as an App'}
-              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
-                isInstalled
-                  ? 'bg-emerald-950/70 border-emerald-800/60 text-emerald-400 hover:bg-emerald-900/80'
-                  : 'bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/40 text-emerald-400 hover:text-emerald-300 shadow-xs'
-              }`}
-            >
-              {isInstalled ? (
-                <Check size={12} className="text-emerald-400" />
-              ) : (
+            {/* Download as an App Quick Button in Header (only on website, hidden when installed/standalone) */}
+            {!isInstalled && (
+              <button
+                id="header-download-app-btn"
+                onClick={triggerInstall}
+                title="Download SafaiSeva as an App"
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer border bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/40 text-emerald-400 hover:text-emerald-300 shadow-xs"
+              >
                 <Download size={12} className="text-emerald-400" />
-              )}
-              <span className="text-[11px] font-medium hidden sm:inline">
-                {isInstalled ? 'Installed' : 'App'}
-              </span>
-            </button>
+                <span className="text-[11px] font-medium hidden sm:inline">
+                  App
+                </span>
+              </button>
+            )}
 
             {/* Quick Light/Dark Mode Toggle */}
             {onToggleTheme && (
@@ -176,16 +170,18 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({
                           <span>Switch Role</span>
                         </button>
 
-                        <button
-                          onClick={() => {
-                            setShowProfileMenu(false);
-                            triggerInstall();
-                          }}
-                          className="w-full text-left px-2 py-1.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 rounded-lg flex items-center gap-2 cursor-pointer"
-                        >
-                          <Download size={13} className="text-emerald-400" />
-                          <span>Download as an App</span>
-                        </button>
+                        {!isInstalled && (
+                          <button
+                            onClick={() => {
+                              setShowProfileMenu(false);
+                              triggerInstall();
+                            }}
+                            className="w-full text-left px-2 py-1.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 rounded-lg flex items-center gap-2 cursor-pointer"
+                          >
+                            <Download size={13} className="text-emerald-400" />
+                            <span>Download as an App</span>
+                          </button>
+                        )}
 
                         <button
                           onClick={() => {
