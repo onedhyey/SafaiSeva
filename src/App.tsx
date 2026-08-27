@@ -57,7 +57,7 @@ export default function App() {
   const [settings, setSettings] = useState<DemoSettings>({
     aiOutcomeOverride: 'auto',
     simulateOffline: false,
-    theme: 'dark',
+    theme: 'light',
   });
 
   // Modal States
@@ -75,7 +75,7 @@ export default function App() {
     currentBalance: number;
   } | null>(null);
 
-  const currentTheme: AppTheme = settings.theme || 'dark';
+  const currentTheme: AppTheme = settings.theme || 'light';
 
   // Synchronize theme to document body & root html
   useEffect(() => {
@@ -281,7 +281,9 @@ export default function App() {
                       {residentTab === 'document' && (
                         <DocumentView
                           household={activeHousehold}
-                          onSubmit={handleDocumentSubmit}
+                          handovers={handovers}
+                          aiOverride={settings.aiOutcomeOverride}
+                          onRefreshData={loadData}
                           onCancel={() => setResidentTab('wallet')}
                         />
                       )}

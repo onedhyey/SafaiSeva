@@ -1,6 +1,6 @@
 {
   "name": "SafaiSeva",
   "description": "Civic reward PWA for Ahmedabad waste segregation verification and public transit rewards",
-  "requestFramePermissions": ["geolocation"],
+  "requestFramePermissions": ["camera", "geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

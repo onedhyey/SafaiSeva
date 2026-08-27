@@ -68,23 +68,7 @@
   src: url('/fonts/ibm-plex-mono-latin-600.woff2') format('woff2');
 }
 
-:root, [data-theme="dark"], .dark {
-  --color-ink: #050505;
-  --color-ink-soft: #0e0e11;
-  --color-ink-card: #141418;
-  --color-green: #10b981;
-  --color-amber: #f59e0b;
-  --color-red: #ef4444;
-  --color-indigo: #6366f1;
-  --color-muted: #3f3f46;
-  --color-muted-l: #a1a1aa;
-  --color-tint: #f4f4f5;
-  --color-white: #ffffff;
-  --page-bg: #050505;
-  --page-text: #e0e0e0;
-}
-
-[data-theme="light"], .light {
+:root, [data-theme="light"], .light {
   --color-ink: #f8faf9;
   --color-ink-soft: #ffffff;
   --color-ink-card: #ffffff;
@@ -98,6 +82,22 @@
   --color-white: #0f172a;
   --page-bg: #eef2ef;
   --page-text: #0f172a;
+}
+
+[data-theme="dark"], .dark {
+  --color-ink: #050505;
+  --color-ink-soft: #0e0e11;
+  --color-ink-card: #141418;
+  --color-green: #10b981;
+  --color-amber: #f59e0b;
+  --color-red: #ef4444;
+  --color-indigo: #6366f1;
+  --color-muted: #3f3f46;
+  --color-muted-l: #a1a1aa;
+  --color-tint: #f4f4f5;
+  --color-white: #ffffff;
+  --page-bg: #050505;
+  --page-text: #e0e0e0;
 }
 
 @theme {
@@ -394,6 +394,7 @@ html, body {
 .light button.bg-amber-600 span,
 .light button.bg-red-600 span,
 .light .bg-gradient-to-r span,
+.light .bg-gradient-to-r svg,
 .light button.bg-emerald-600 svg,
 .light button.bg-emerald-500 svg,
 .light button.bg-amber-600 svg,
