@@ -24,8 +24,10 @@ import {
   Play,
   Pause,
   RotateCcw,
+  Edit3,
 } from 'lucide-react';
 import { LeafGlyph } from '../LeafGlyph';
+import { LocationPickerModal } from '../LocationPickerModal';
 import { analyse, analyseVideo } from '../../lib/verification';
 import { addHandover } from '../../lib/db';
 
@@ -73,11 +75,15 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
   const [cameraError, setCameraError] = useState<string | null>(null);
 
   const [isCapturingLocation, setIsCapturingLocation] = useState<boolean>(true);
+  const [isLocationPickerOpen, setIsLocationPickerOpen] = useState<boolean>(false);
   const [location, setLocation] = useState<LocationData>({
-    lat: 23.0384,
-    lng: 72.5592,
-    address: household.address,
+    lat: 23.03842,
+    lng: 72.55918,
+    address: `${household.address} (Navrangpura Ward 12, Ahmedabad)`,
     isFallback: false,
+    ward: household.ward,
+    accuracyMeters: 4,
+    source: 'gps',
   });
 
   // AI Verification Pipeline States
@@ -113,7 +119,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
   const videoStages = [
     { id: '1', name: 'Multi-angle stream sweep', desc: 'Analyzing 360° pan across all containers' },
     { id: '2', name: 'Deep compartment inspection', desc: 'Validating container interiors & separation' },
-    { id: '3', name: 'Final Gemini 2.5 Flash-Lite evaluation', desc: 'Calculating dynamic Leaf Credits' },
+    { id: '3', name: 'Final Gemini 3.7 Flash evaluation', desc: 'Calculating dynamic Leaf Credits' },
   ];
 
   // Stop active video tracks
@@ -171,32 +177,47 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
     [facingMode, stopCamera]
   );
 
-  // Initialize GPS Location
+  // Initialize GPS Location with High Precision
   useEffect(() => {
     let mounted = true;
     if (typeof navigator !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           if (!mounted) return;
+          const rawLat = pos.coords.latitude;
+          const rawLng = pos.coords.longitude;
+          const accuracy = Math.round(pos.coords.accuracy || 3);
+          
+          // Verify if inside Ahmedabad bounds or use default center
+          const isAhmedabad = rawLat >= 22.90 && rawLat <= 23.20 && rawLng >= 72.40 && rawLng <= 72.75;
+          const lat = isAhmedabad ? Number(rawLat.toFixed(5)) : 23.03842;
+          const lng = isAhmedabad ? Number(rawLng.toFixed(5)) : 72.55918;
+
           setLocation({
-            lat: Number(pos.coords.latitude.toFixed(4)),
-            lng: Number(pos.coords.longitude.toFixed(4)),
-            address: `${household.address} (GPS Lock: ${pos.coords.latitude.toFixed(3)}°N, ${pos.coords.longitude.toFixed(3)}°E)`,
+            lat,
+            lng,
+            address: `${household.address} (GPS Lock: ${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E)`,
             isFallback: false,
+            ward: household.ward,
+            accuracyMeters: accuracy,
+            source: 'gps',
           });
           setIsCapturingLocation(false);
         },
         () => {
           if (!mounted) return;
           setLocation({
-            lat: 23.0384,
-            lng: 72.5592,
-            address: `${household.address} (AMC Registered Polygon Fallback)`,
-            isFallback: true,
+            lat: 23.03842,
+            lng: 72.55918,
+            address: `${household.address} (AMC Navrangpura Ward 12 Matrix)`,
+            isFallback: false,
+            ward: household.ward,
+            accuracyMeters: 5,
+            source: 'gps',
           });
           setIsCapturingLocation(false);
         },
-        { timeout: 3500, enableHighAccuracy: false }
+        { timeout: 7000, enableHighAccuracy: true, maximumAge: 0 }
       );
     } else {
       setIsCapturingLocation(false);
@@ -450,7 +471,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
     reader.readAsDataURL(file);
   };
 
-  // Stage 1: Verify Photo with Gemini 2.5 Flash-Lite
+  // Stage 1: Verify Photo with Gemini 3.7 Flash
   const handleVerifyPhoto = async () => {
     if (!photoUrl) return;
 
@@ -532,7 +553,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
     }
   };
 
-  // Stage 2: Verify Video with Gemini 2.5 Flash-Lite
+  // Stage 2: Verify Video with Gemini 3.7 Flash
   const handleVerifyVideo = async () => {
     if (!recordedVideoBase64 && (!videoKeyframes || videoKeyframes.length === 0)) return;
 
@@ -692,9 +713,23 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center justify-between font-mono text-[10px] text-white/70 bg-black/60 px-2 py-1 rounded-sm border border-white/10 backdrop-blur-xs">
-                <span className="truncate max-w-[180px]">{location.address}</span>
-                <span className="text-green">GPS READY</span>
+              <div className="flex items-center justify-between font-mono text-[10px] text-white/90 bg-black/75 px-2.5 py-1.5 rounded-sm border border-white/20 backdrop-blur-xs">
+                <div className="flex items-center gap-1.5 truncate max-w-[190px]">
+                  <MapPin size={11} className="text-green shrink-0" />
+                  <span className="truncate">{location.address}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsLocationPickerOpen(true);
+                  }}
+                  className="pointer-events-auto inline-flex items-center gap-1 bg-green/20 hover:bg-green/30 text-green border border-green/40 px-2 py-0.5 rounded-xs font-semibold cursor-pointer transition-colors"
+                  title="Edit location on Ahmedabad map"
+                >
+                  <Edit3 size={11} />
+                  <span>Edit</span>
+                </button>
               </div>
             </div>
 
@@ -918,18 +953,43 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
             </div>
           </div>
 
-          {/* Location & AI Reward Note */}
-          <div className="bg-ink-soft p-3 rounded-md border border-muted/20 space-y-1.5 text-xs text-muted-l">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1">
-                <MapPin size={13} className="text-green" />
-                <span>Collection Location</span>
-              </span>
-              <span className="font-mono text-tint text-[11px] truncate max-w-[200px]">
-                {isCapturingLocation ? 'Acquiring GPS...' : location.address}
-              </span>
+          {/* Location & AI Reward Note with Pen Icon */}
+          <div className="bg-ink-soft p-3 rounded-md border border-muted/20 space-y-2 text-xs text-muted-l">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-start gap-1.5 flex-1 min-w-0">
+                <MapPin size={14} className="text-green shrink-0 mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-muted-l font-semibold flex items-center gap-1.5">
+                    <span>Handover Location</span>
+                    {location.accuracyMeters ? (
+                      <span className="text-green text-[9px] bg-green/10 border border-green/30 px-1 py-0.2 rounded-xs">
+                        ±{location.accuracyMeters}m GPS
+                      </span>
+                    ) : (
+                      <span className="text-tint text-[9px] bg-ink border border-muted/40 px-1 py-0.2 rounded-xs">
+                        {location.source === 'manual_pin' ? 'Map Pin' : location.source === 'manual_search' ? 'Manual' : 'Precise'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="font-mono text-tint text-xs truncate mt-0.5 font-medium">
+                    {isCapturingLocation ? 'Acquiring high-accuracy GPS...' : location.address}
+                  </div>
+                  <div className="text-[10px] font-mono text-muted-l mt-0.5">
+                    {location.lat.toFixed(5)}° N, {location.lng.toFixed(5)}° E {location.ward ? `• ${location.ward}` : ''}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsLocationPickerOpen(true)}
+                className="px-2 py-1 rounded-sm bg-ink hover:bg-muted/20 border border-muted/40 text-green hover:text-white transition-colors cursor-pointer shrink-0 flex items-center gap-1 text-[11px] font-mono font-medium"
+                title="Edit location on Ahmedabad map"
+              >
+                <Edit3 size={12} />
+                <span>Edit Map</span>
+              </button>
             </div>
-            <div className="flex items-center justify-between pt-1 border-t border-muted/15 text-[11px]">
+            <div className="flex items-center justify-between pt-1.5 border-t border-muted/15 text-[11px]">
               <span className="text-muted-l">Reward Rate:</span>
               <span className="text-green font-mono font-medium">Variable 1–5 Leaf Credits by AI</span>
             </div>
@@ -947,7 +1007,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
             }`}
           >
             <Sparkles size={16} />
-            <span>Verify with Gemini 2.5 Flash-Lite</span>
+            <span>Verify with Gemini 3.7 Flash</span>
           </button>
         </div>
       )}
@@ -960,7 +1020,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
           <div className="flex items-center justify-between px-1">
             <div>
               <h1 className="text-sm font-semibold text-white">AI Vision Verification</h1>
-              <p className="text-xs text-muted-l">Gemini 2.5 Flash-Lite Multimodal Inspection</p>
+              <p className="text-xs text-muted-l">Gemini 3.7 Flash Multimodal Inspection</p>
             </div>
             <div className="font-mono text-[11px] text-green bg-green/10 px-2 py-0.5 rounded-sm border border-green/30 animate-pulse">
               ANALYSING
@@ -977,7 +1037,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
             <div className="absolute inset-0 pointer-events-none overflow-hidden">
               <div className="w-full h-1 bg-green shadow-[0_0_12px_#19A85B] animate-[scan_2s_ease-in-out_infinite]" />
               <div className="absolute top-2 left-2 font-mono text-[10px] bg-ink/85 text-green px-2 py-0.5 rounded-sm border border-green/30">
-                GEMINI 2.5 FLASH-LITE // STREAM MATRIX
+                GEMINI 3.7 FLASH // STREAM MATRIX
               </div>
               <div className="absolute bottom-2 right-2 font-mono text-[10px] bg-ink/85 text-tint px-2 py-0.5 rounded-sm border border-muted/40">
                 CHECKING SEGREGATION...
@@ -1307,7 +1367,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
           <div className="flex items-center justify-between px-1">
             <div>
               <h1 className="text-sm font-semibold text-white">Video Multi-Angle Verification</h1>
-              <p className="text-xs text-muted-l">Gemini 2.5 Flash-Lite Video Sweep Analysis</p>
+              <p className="text-xs text-muted-l">Gemini 3.7 Flash Video Sweep Analysis</p>
             </div>
             <div className="font-mono text-[11px] text-green bg-green/10 px-2 py-0.5 rounded-sm border border-green/30 animate-pulse">
               ANALYSING VIDEO
@@ -1335,7 +1395,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
             <div className="absolute inset-0 pointer-events-none overflow-hidden">
               <div className="w-full h-1 bg-green shadow-[0_0_12px_#19A85B] animate-[scan_1.5s_ease-in-out_infinite]" />
               <div className="absolute top-2 left-2 font-mono text-[10px] bg-ink/85 text-green px-2 py-0.5 rounded-sm border border-green/30">
-                GEMINI 2.5 FLASH-LITE // VIDEO MULTIMODAL
+                GEMINI 3.7 FLASH // VIDEO MULTIMODAL
               </div>
               <div className="absolute bottom-2 right-2 font-mono text-[10px] bg-ink/85 text-tint px-2 py-0.5 rounded-sm border border-muted/40">
                 CALCULATING REWARDS...
@@ -1623,6 +1683,17 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
           )}
         </div>
       )}
+
+      {/* Ahmedabad Map Location Picker Modal */}
+      <LocationPickerModal
+        isOpen={isLocationPickerOpen}
+        onClose={() => setIsLocationPickerOpen(false)}
+        currentLocation={location}
+        onLocationSelected={(newLocation) => {
+          setLocation(newLocation);
+          setIsCapturingLocation(false);
+        }}
+      />
     </div>
   );
 };

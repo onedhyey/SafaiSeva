@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { SafaiSevaLogo } from '../SafaiSevaLogo';
 import { LeafGlyph } from '../LeafGlyph';
 import { useAuth } from '../../lib/authContext';
+import { usePwaInstall } from '../../lib/usePwaInstall';
 import {
   LogIn,
   ShieldCheck,
@@ -12,10 +13,14 @@ import {
   User,
   KeyRound,
   Lock,
+  Download,
+  Smartphone,
+  Check,
 } from 'lucide-react';
 
 export const LoginView: React.FC = () => {
   const { signIn, hasClerkKey, openSignInModal } = useAuth();
+  const { isInstalled, triggerInstall } = usePwaInstall();
   const [customName, setCustomName] = useState('');
   const [showCustomInput, setShowCustomInput] = useState(false);
 
@@ -56,6 +61,23 @@ export const LoginView: React.FC = () => {
         <p className="text-xs text-zinc-400 max-w-xs mt-1 leading-relaxed">
           Daily waste segregation verification, Green Leaf civic credits, and BRTS / Metro transit rewards.
         </p>
+
+        {/* Dedicated "Download as an App" action banner on login page */}
+        <button
+          id="login-view-download-app-btn"
+          onClick={triggerInstall}
+          className="mt-3.5 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-emerald-500/40 text-xs text-zinc-200 transition-all shadow-md hover:scale-[1.02] cursor-pointer"
+        >
+          <div className="w-5 h-5 rounded-md bg-emerald-950 flex items-center justify-center text-emerald-400 shrink-0">
+            {isInstalled ? <Check size={12} /> : <Download size={12} />}
+          </div>
+          <span className="font-semibold text-emerald-400">
+            {isInstalled ? 'SafaiSeva App Installed' : 'Download SafaiSeva as an App'}
+          </span>
+          <span className="text-[10px] font-mono text-zinc-400">
+            {isInstalled ? '(View Guide)' : '(Offline PWA)'}
+          </span>
+        </button>
       </div>
 
       {/* Feature Highlights Grid */}
@@ -118,6 +140,7 @@ export const LoginView: React.FC = () => {
         {showCustomInput ? (
           <div className="space-y-2 mb-3">
             <input
+              id="custom-name-login-input"
               type="text"
               placeholder="Enter your name (e.g. Aarav Patel)"
               value={customName}
@@ -126,12 +149,14 @@ export const LoginView: React.FC = () => {
             />
             <div className="flex gap-2">
               <button
+                id="custom-name-continue-btn"
                 onClick={() => handleQuickLogin(customName)}
                 className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium py-2 rounded-lg transition-colors cursor-pointer"
               >
                 Continue to Role Select
               </button>
               <button
+                id="custom-name-cancel-btn"
                 onClick={() => setShowCustomInput(false)}
                 className="px-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs rounded-lg transition-colors cursor-pointer"
               >
@@ -141,6 +166,7 @@ export const LoginView: React.FC = () => {
           </div>
         ) : (
           <button
+            id="login-view-primary-login-btn"
             onClick={() => handleQuickLogin()}
             className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 !text-white font-medium py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40 transition-all cursor-pointer group"
           >
@@ -153,6 +179,7 @@ export const LoginView: React.FC = () => {
         <div className="mt-3 pt-3 border-t border-zinc-800/80 flex items-center justify-between text-[11px] text-zinc-400">
           <span>Testing different users?</span>
           <button
+            id="custom-name-signin-btn"
             onClick={() => setShowCustomInput(!showCustomInput)}
             className="text-emerald-400 hover:text-emerald-300 font-medium underline cursor-pointer"
           >

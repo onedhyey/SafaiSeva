@@ -1,6 +1,21 @@
 import React, { useState } from 'react';
-import { X, RotateCcw, ShieldAlert, CheckCircle2, AlertTriangle, XCircle, Sliders, Moon, Sun } from 'lucide-react';
+import {
+  X,
+  RotateCcw,
+  ShieldAlert,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  Sliders,
+  Moon,
+  Sun,
+  Download,
+  Smartphone,
+  Check,
+} from 'lucide-react';
 import { DemoOutcomeOverride, HouseholdProfile, AppTheme } from '../types';
+import { usePwaInstall } from '../lib/usePwaInstall';
+import { InstallModal } from './InstallModal';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -25,6 +40,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const [resetting, setResetting] = useState(false);
   const [resetDone, setResetDone] = useState(false);
+  const { isInstalled, isIos, hasNativePrompt, showInstallModal, setShowInstallModal, triggerInstall } = usePwaInstall();
 
   if (!isOpen) return null;
 
@@ -71,125 +87,194 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <div className="w-full max-w-md bg-zinc-900 border border-zinc-700/80 rounded-xl p-5 text-left text-zinc-200 shadow-2xl max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-          <div>
-            <h3 className="text-sm font-semibold text-white">Demo Control Panel</h3>
-            <p className="text-[11px] text-zinc-400 font-mono">Jury presentation & deterministic state toggles</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-zinc-400 hover:text-white p-1 rounded-md hover:bg-zinc-800 transition-colors"
-            aria-label="Close settings"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* Theme Mode Selector */}
-        <div className="mt-3.5">
-          <label className="block text-xs font-semibold text-white mb-1.5">
-            Color Theme Mode
-          </label>
-          <div className="grid grid-cols-2 gap-2">
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+        <div
+          id="safai-settings-modal-card"
+          className="w-full max-w-md bg-zinc-900 border border-zinc-700/80 rounded-xl p-5 text-left text-zinc-200 shadow-2xl max-h-[90vh] overflow-y-auto"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+            <div>
+              <h3 className="text-sm font-semibold text-white">Demo Control Panel</h3>
+              <p className="text-[11px] text-zinc-400 font-mono">Jury presentation & deterministic state toggles</p>
+            </div>
             <button
-              onClick={() => onUpdateTheme('dark')}
-              className={`p-2.5 rounded-lg border text-xs font-medium flex items-center gap-2 transition-all cursor-pointer ${
-                theme === 'dark'
-                  ? 'bg-zinc-800 border-emerald-500 text-white shadow-xs font-semibold'
-                  : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
-              }`}
+              id="close-settings-modal-btn"
+              onClick={onClose}
+              className="text-zinc-400 hover:text-white p-1 rounded-md hover:bg-zinc-800 transition-colors cursor-pointer"
+              aria-label="Close settings"
             >
-              <Moon size={15} className={theme === 'dark' ? 'text-emerald-400' : 'text-zinc-400'} />
-              <span>Dark (Immersive)</span>
-            </button>
-            <button
-              onClick={() => onUpdateTheme('light')}
-              className={`p-2.5 rounded-lg border text-xs font-medium flex items-center gap-2 transition-all cursor-pointer ${
-                theme === 'light'
-                  ? 'bg-zinc-800 border-emerald-500 text-white shadow-xs font-semibold'
-                  : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
-              }`}
-            >
-              <Sun size={15} className={theme === 'light' ? 'text-amber-400' : 'text-zinc-400'} />
-              <span>Light (Civic Clean)</span>
+              <X size={16} />
             </button>
           </div>
-        </div>
 
-        {/* Household Info */}
-        <div className="mt-3.5 bg-zinc-950 p-3 rounded-lg border border-zinc-800 text-xs">
-          <div className="flex items-center justify-between text-zinc-400 mb-1">
-            <span>Household ID</span>
-            <span className="font-mono text-white font-medium">{household.id}</span>
-          </div>
-          <div className="flex items-center justify-between text-zinc-400 mb-1">
-            <span>Registered Ward</span>
-            <span className="text-zinc-200">{household.ward}</span>
-          </div>
-          <div className="flex items-center justify-between text-zinc-400">
-            <span>Collection Route Window</span>
-            <span className="font-mono text-emerald-400 font-medium">06:00 AM – 11:00 AM</span>
-          </div>
-        </div>
+          {/* Standalone PWA Download Section */}
+          <div className="mt-3.5 bg-zinc-950 p-3 rounded-lg border border-zinc-800 flex items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-emerald-950/80 border border-emerald-800/60 flex items-center justify-center text-emerald-400 shrink-0">
+                <Smartphone size={16} />
+              </div>
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-white truncate">
+                  {isInstalled ? 'SafaiSeva App Installed' : 'Install Standalone App'}
+                </div>
+                <div className="text-[10px] text-zinc-400 font-mono truncate">
+                  {isInstalled ? 'Running with offline support' : 'Add to Home Screen / Desktop'}
+                </div>
+              </div>
+            </div>
 
-        {/* AI Outcome Selector */}
-        <div className="mt-4">
-          <label className="block text-xs font-semibold text-white mb-2">
-            Simulate AI Analysis Outcome
-          </label>
-          <div className="space-y-1.5">
-            {overrideOptions.map((opt) => {
-              const active = aiOverride === opt.id;
-              const Icon = opt.icon;
-              return (
-                <button
-                  key={opt.id}
-                  onClick={() => onUpdateOverride(opt.id)}
-                  className={`w-full text-left p-2.5 rounded-lg border transition-colors flex items-start gap-2.5 cursor-pointer ${
-                    active
-                      ? 'bg-zinc-800 border-emerald-500 text-white shadow-xs'
-                      : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
-                  }`}
-                >
-                  <Icon size={16} className={`shrink-0 mt-0.5 ${opt.color}`} />
-                  <div>
-                    <div className="text-xs font-medium text-white">{opt.label}</div>
-                    <div className="text-[11px] text-zinc-400">{opt.desc}</div>
-                  </div>
-                </button>
-              );
-            })}
+            <button
+              id="settings-download-app-btn"
+              onClick={triggerInstall}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs transition-all shrink-0 cursor-pointer shadow-xs"
+            >
+              {isInstalled ? <Check size={12} /> : <Download size={12} />}
+              <span>{isInstalled ? 'Guide' : 'Download App'}</span>
+            </button>
           </div>
-        </div>
 
-        {/* Reset Demo Button */}
-        <div className="mt-5 pt-3.5 border-t border-zinc-800 flex items-center justify-between gap-3">
-          <div>
-            <div className="text-xs font-medium text-white">Reset Demo State</div>
-            <div className="text-[11px] text-zinc-400">Wipes IndexedDB & re-seeds 3 weeks of data</div>
+          {/* Theme Mode Selector */}
+          <div className="mt-3.5">
+            <label className="block text-xs font-semibold text-white mb-1.5">
+              Color Theme Mode
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                id="theme-dark-btn"
+                onClick={() => onUpdateTheme('dark')}
+                className={`p-2.5 rounded-lg border text-xs font-medium flex items-center gap-2 transition-all cursor-pointer ${
+                  theme === 'dark'
+                    ? 'bg-zinc-800 border-emerald-500 text-white shadow-xs font-semibold'
+                    : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
+                }`}
+              >
+                <Moon size={15} className={theme === 'dark' ? 'text-emerald-400' : 'text-zinc-400'} />
+                <span>Dark (Immersive)</span>
+              </button>
+              <button
+                id="theme-light-btn"
+                onClick={() => onUpdateTheme('light')}
+                className={`p-2.5 rounded-lg border text-xs font-medium flex items-center gap-2 transition-all cursor-pointer ${
+                  theme === 'light'
+                    ? 'bg-zinc-800 border-emerald-500 text-white shadow-xs font-semibold'
+                    : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
+                }`}
+              >
+                <Sun size={15} className={theme === 'light' ? 'text-amber-400' : 'text-zinc-400'} />
+                <span>Light (Civic Clean)</span>
+              </button>
+            </div>
           </div>
-          <button
-            onClick={handleReset}
-            disabled={resetting}
-            className="inline-flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white border border-zinc-700 text-xs font-medium px-3 py-2 rounded-lg transition-colors shrink-0 cursor-pointer shadow-xs"
-          >
-            {resetDone ? (
-              <>
-                <CheckCircle2 size={13} className="text-emerald-400" />
-                <span>Reset Done</span>
-              </>
-            ) : (
-              <>
-                <RotateCcw size={13} className={resetting ? 'animate-spin' : ''} />
-                <span>{resetting ? 'Resetting...' : 'Reset Demo'}</span>
-              </>
-            )}
-          </button>
+
+          {/* Household Info */}
+          <div className="mt-3.5 bg-zinc-950 p-3 rounded-lg border border-zinc-800 text-xs">
+            <div className="flex items-center justify-between text-zinc-400 mb-1">
+              <span>Household ID</span>
+              <span className="font-mono text-white font-medium">{household.id}</span>
+            </div>
+            <div className="flex items-center justify-between text-zinc-400 mb-1">
+              <span>Registered Ward</span>
+              <span className="text-zinc-200">{household.ward}</span>
+            </div>
+            <div className="flex items-center justify-between text-zinc-400">
+              <span>Collection Route Window</span>
+              <span className="font-mono text-emerald-400 font-medium">06:00 AM – 11:00 AM</span>
+            </div>
+          </div>
+
+          {/* Demo Role Access Codes Reference */}
+          <div className="mt-3.5 bg-zinc-950 p-3 rounded-lg border border-zinc-800 text-xs">
+            <div className="text-xs font-semibold text-white mb-1.5 flex items-center justify-between">
+              <span>Role Access Demo Codes</span>
+              <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded">
+                DEMO PASSWORDS
+              </span>
+            </div>
+            <div className="space-y-1.5 text-[11px]">
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-400">Ward Officer Section:</span>
+                <span className="font-mono text-blue-400 bg-blue-950/70 border border-blue-800/60 px-2 py-0.5 rounded font-semibold">
+                  AMC-OFFICER-2026
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-400">Karmachari Terminal:</span>
+                <span className="font-mono text-amber-400 bg-amber-950/70 border border-amber-800/60 px-2 py-0.5 rounded font-semibold">
+                  7841
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* AI Outcome Selector */}
+          <div className="mt-4">
+            <label className="block text-xs font-semibold text-white mb-2">
+              Simulate AI Analysis Outcome
+            </label>
+            <div className="space-y-1.5">
+              {overrideOptions.map((opt) => {
+                const active = aiOverride === opt.id;
+                const Icon = opt.icon;
+                return (
+                  <button
+                    key={opt.id}
+                    id={`override-${opt.id}-btn`}
+                    onClick={() => onUpdateOverride(opt.id)}
+                    className={`w-full text-left p-2.5 rounded-lg border transition-colors flex items-start gap-2.5 cursor-pointer ${
+                      active
+                        ? 'bg-zinc-800 border-emerald-500 text-white shadow-xs'
+                        : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
+                    }`}
+                  >
+                    <Icon size={16} className={`shrink-0 mt-0.5 ${opt.color}`} />
+                    <div>
+                      <div className="text-xs font-medium text-white">{opt.label}</div>
+                      <div className="text-[11px] text-zinc-400">{opt.desc}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Reset Demo Button */}
+          <div className="mt-5 pt-3.5 border-t border-zinc-800 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-medium text-white">Reset Demo State</div>
+              <div className="text-[11px] text-zinc-400">Wipes IndexedDB & re-seeds 3 weeks of data</div>
+            </div>
+            <button
+              id="reset-demo-action-btn"
+              onClick={handleReset}
+              disabled={resetting}
+              className="inline-flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white border border-zinc-700 text-xs font-medium px-3 py-2 rounded-lg transition-colors shrink-0 cursor-pointer shadow-xs"
+            >
+              {resetDone ? (
+                <>
+                  <CheckCircle2 size={13} className="text-emerald-400" />
+                  <span>Reset Done</span>
+                </>
+              ) : (
+                <>
+                  <RotateCcw size={13} className={resetting ? 'animate-spin' : ''} />
+                  <span>{resetting ? 'Resetting...' : 'Reset Demo'}</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* Standalone Install Guidance Modal */}
+      <InstallModal
+        isOpen={showInstallModal}
+        onClose={() => setShowInstallModal(false)}
+        isIos={isIos}
+        hasNativePrompt={hasNativePrompt}
+        onNativeInstall={triggerInstall}
+      />
+    </>
   );
 };

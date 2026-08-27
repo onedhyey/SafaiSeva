@@ -15,8 +15,8 @@ app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 // Helper to get Gemini API key from environment or local env files
 function resolveGeminiApiKey(): string | undefined {
-  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== "MY_GEMINI_API_KEY") {
-    return process.env.GEMINI_API_KEY;
+  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== "MY_GEMINI_API_KEY" && process.env.GEMINI_API_KEY.trim() !== "") {
+    return process.env.GEMINI_API_KEY.trim();
   }
   // Try reading from .env or .env.example
   for (const filename of [".env", ".env.example"]) {
@@ -70,24 +70,24 @@ const verificationSchema = {
   properties: {
     verified: {
       type: Type.BOOLEAN,
-      description: "True if declared waste streams are present and segregated without severe cross-contamination. False otherwise.",
+      description: "True ONLY if visible waste is present and the declared waste streams are clearly segregated in separate bins/containers/bags without cross-contamination. MUST be false if no waste is visible, image is an empty scene, wall, floor, table, person, or unrelated object, or if waste is unsegregated/contaminated.",
     },
     confidence: {
       type: Type.STRING,
-      description: "Confidence level: 'high' if the view is clear and definitive, 'low' if blurry, dark, ambiguous, or obscured.",
+      description: "'high' if the view is clear and definitive (whether verified or rejected); 'low' if lighting is too dark, blurry, occluded, or at an ambiguous angle to evaluate waste contents.",
     },
     detectedStreams: {
       type: Type.ARRAY,
       items: { type: Type.STRING },
-      description: "Array of stream identifiers detected from ['wet', 'dry', 'sanitary', 'special_care'].",
+      description: "List of waste streams genuinely visible and identifiable in the image from ['wet', 'dry', 'sanitary', 'special_care']. Empty array [] if no waste or unidentifiable.",
     },
     creditsAwarded: {
       type: Type.INTEGER,
-      description: "Variable Leaf Credits awarded (1 to 5) based on count and purity of segregated streams verified. 0 if verified is false or confidence is low.",
+      description: "Leaf Credits awarded (1 to 5) strictly based on verified segregated streams. 0 if verified is false or confidence is low.",
     },
     reason: {
       type: Type.STRING,
-      description: "Concise, citizen-friendly explanation (1-2 sentences) describing why this verification verdict was reached.",
+      description: "Accurate, honest, citizen-friendly explanation (1-2 sentences) describing what is visible in the image and why this verification verdict and credit score was determined.",
     },
     streams: {
       type: Type.OBJECT,
@@ -95,9 +95,9 @@ const verificationSchema = {
         wet: {
           type: Type.OBJECT,
           properties: {
-            detected: { type: Type.BOOLEAN },
+            detected: { type: Type.BOOLEAN, description: "True only if wet/organic waste (kitchen scraps, peels) is genuinely visible in a separate compartment." },
             status: { type: Type.STRING, description: "clean, contaminated, or none" },
-            note: { type: Type.STRING },
+            note: { type: Type.STRING, description: "Specific observation of wet compartment, or 'Not visible / not present'" },
             verdict: { type: Type.STRING, description: "clean, contaminated, or none" },
           },
           required: ["detected", "status", "note", "verdict"],
@@ -105,9 +105,9 @@ const verificationSchema = {
         dry: {
           type: Type.OBJECT,
           properties: {
-            detected: { type: Type.BOOLEAN },
+            detected: { type: Type.BOOLEAN, description: "True only if dry recyclables (paper, plastic, cardboard, metal) are genuinely visible in a separate compartment." },
             status: { type: Type.STRING, description: "clean, contaminated, or none" },
-            note: { type: Type.STRING },
+            note: { type: Type.STRING, description: "Specific observation of dry compartment, or 'Not visible / not present'" },
             verdict: { type: Type.STRING, description: "clean, contaminated, or none" },
           },
           required: ["detected", "status", "note", "verdict"],
@@ -115,9 +115,9 @@ const verificationSchema = {
         sanitary: {
           type: Type.OBJECT,
           properties: {
-            detected: { type: Type.BOOLEAN },
+            detected: { type: Type.BOOLEAN, description: "True only if sanitary waste wrapped in marked paper/pouch is genuinely visible." },
             status: { type: Type.STRING, description: "wrapped, unwrapped, or none" },
-            note: { type: Type.STRING },
+            note: { type: Type.STRING, description: "Specific observation of sanitary waste, or 'Not visible / not present'" },
             verdict: { type: Type.STRING, description: "wrapped, unwrapped, or none" },
           },
           required: ["detected", "status", "note", "verdict"],
@@ -125,9 +125,9 @@ const verificationSchema = {
         special_care: {
           type: Type.OBJECT,
           properties: {
-            detected: { type: Type.BOOLEAN },
+            detected: { type: Type.BOOLEAN, description: "True only if hazardous/e-waste/batteries/sharps in dedicated container are genuinely visible." },
             status: { type: Type.STRING, description: "safe, hazardous, or none" },
-            note: { type: Type.STRING },
+            note: { type: Type.STRING, description: "Specific observation of special care waste, or 'Not visible / not present'" },
             verdict: { type: Type.STRING, description: "safe, hazardous, or none" },
           },
           required: ["detected", "status", "note", "verdict"],
@@ -139,102 +139,6 @@ const verificationSchema = {
   required: ["verified", "confidence", "detectedStreams", "creditsAwarded", "reason", "streams"],
 };
 
-// Fallback logic when no API key is provided or offline simulation
-function generateFallbackVerification(
-  streams: { wet: boolean; dry: boolean; sanitary: boolean; special_care: boolean },
-  override: string = "auto",
-  mediaType: "photo" | "video" = "photo"
-) {
-  if (override === "force_approve") {
-    const streamCount = [streams.wet, streams.dry, streams.sanitary, streams.special_care].filter(Boolean).length;
-    const credits = Math.min(5, Math.max(1, streamCount + (streams.special_care ? 2 : streams.sanitary ? 1 : 0)));
-    return {
-      verified: true,
-      confidence: "high",
-      detectedStreams: Object.keys(streams).filter((k) => (streams as any)[k]),
-      creditsAwarded: credits,
-      reason: "All declared streams compliant. Organic wet and recyclable dry compartments cleanly separated.",
-      streams: {
-        wet: { detected: streams.wet, status: streams.wet ? "clean" : "none", note: streams.wet ? "Clean organic kitchen waste" : "Not declared", verdict: streams.wet ? "clean" : "none" },
-        dry: { detected: streams.dry, status: streams.dry ? "clean" : "none", note: streams.dry ? "Clean paper and dry recyclables" : "Not declared", verdict: streams.dry ? "clean" : "none" },
-        sanitary: { detected: streams.sanitary, status: streams.sanitary ? "wrapped" : "none", note: streams.sanitary ? "Wrapped in newspaper with red mark" : "None", verdict: streams.sanitary ? "wrapped" : "none" },
-        special_care: { detected: streams.special_care, status: streams.special_care ? "safe" : "none", note: streams.special_care ? "Isolated in designated hazard box" : "None", verdict: streams.special_care ? "safe" : "none" },
-      },
-    };
-  }
-
-  if (override === "force_reject") {
-    return {
-      verified: false,
-      confidence: "high",
-      detectedStreams: ["wet", "dry"],
-      creditsAwarded: 0,
-      reason: "Non-biodegradable synthetic wrapper identified in wet bin. Waste must be 100% segregated.",
-      streams: {
-        wet: { detected: true, status: "contaminated", note: "Plastic liner detected in wet compartment", verdict: "contaminated" },
-        dry: { detected: true, status: "clean", note: "Clean dry recyclables", verdict: "clean" },
-        sanitary: { detected: false, status: "none", note: "None", verdict: "none" },
-        special_care: { detected: false, status: "none", note: "None", verdict: "none" },
-      },
-    };
-  }
-
-  if (override === "force_review" && mediaType === "photo") {
-    return {
-      verified: false,
-      confidence: "low",
-      detectedStreams: Object.keys(streams).filter((k) => (streams as any)[k]),
-      creditsAwarded: 0,
-      reason: "Partial shadow over the dry waste bin makes plastic film boundary ambiguous. Additional video verification required.",
-      streams: {
-        wet: { detected: streams.wet, status: "clean", note: "Organic peels visible", verdict: "clean" },
-        dry: { detected: streams.dry, status: "unclear", note: "Ambiguous boundary due to lighting", verdict: "none" },
-        sanitary: { detected: streams.sanitary, status: streams.sanitary ? "wrapped" : "none", note: streams.sanitary ? "Wrapped item" : "None", verdict: streams.sanitary ? "wrapped" : "none" },
-        special_care: { detected: streams.special_care, status: streams.special_care ? "safe" : "none", note: streams.special_care ? "Isolated container" : "None", verdict: streams.special_care ? "safe" : "none" },
-      },
-    };
-  }
-
-  // Standard calculation
-  const streamCount = [streams.wet, streams.dry, streams.sanitary, streams.special_care].filter(Boolean).length;
-  if (streamCount === 0) {
-    return {
-      verified: false,
-      confidence: "high",
-      detectedStreams: [],
-      creditsAwarded: 0,
-      reason: "No waste streams selected for verification. Please select at least one segregated stream.",
-      streams: {
-        wet: { detected: false, status: "none", note: "Not declared", verdict: "none" },
-        dry: { detected: false, status: "none", note: "Not declared", verdict: "none" },
-        sanitary: { detected: false, status: "none", note: "Not declared", verdict: "none" },
-        special_care: { detected: false, status: "none", note: "Not declared", verdict: "none" },
-      },
-    };
-  }
-
-  let credits = 2;
-  if (streamCount === 1) credits = 1;
-  else if (streamCount === 2) credits = 2;
-  else if (streamCount === 3) credits = 3;
-  else if (streamCount >= 4) credits = 4;
-  if (streams.special_care) credits = Math.min(5, credits + 1);
-
-  return {
-    verified: true,
-    confidence: "high",
-    detectedStreams: Object.keys(streams).filter((k) => (streams as any)[k]),
-    creditsAwarded: credits,
-    reason: `All ${streamCount} declared stream${streamCount > 1 ? "s" : ""} verified cleanly segregated with zero cross-contamination.`,
-    streams: {
-      wet: { detected: streams.wet, status: streams.wet ? "clean" : "none", note: streams.wet ? "Clean organic waste, no plastics" : "None", verdict: streams.wet ? "clean" : "none" },
-      dry: { detected: streams.dry, status: streams.dry ? "clean" : "none", note: streams.dry ? "Clean dry paper and recyclables" : "None", verdict: streams.dry ? "clean" : "none" },
-      sanitary: { detected: streams.sanitary, status: streams.sanitary ? "wrapped" : "none", note: streams.sanitary ? "Securely wrapped with marking" : "None", verdict: streams.sanitary ? "wrapped" : "none" },
-      special_care: { detected: streams.special_care, status: streams.special_care ? "safe" : "none", note: streams.special_care ? "Isolated hazard compartment" : "None", verdict: streams.special_care ? "safe" : "none" },
-    },
-  };
-}
-
 // -------------------------------------------------------------
 // API Routes
 // -------------------------------------------------------------
@@ -243,7 +147,7 @@ function generateFallbackVerification(
 app.get("/api/health", (req, res) => {
   res.json({
     status: "ok",
-    model: "gemini-2.5-flash-lite",
+    model: "gemini-3.7-flash",
     hasApiKey: Boolean(resolveGeminiApiKey()),
   });
 });
@@ -251,23 +155,18 @@ app.get("/api/health", (req, res) => {
 // Stage 1: Photo Verification Endpoint
 app.post("/api/verify/photo", async (req, res) => {
   try {
-    const { photo, streams, location, household, override = "auto" } = req.body;
+    const { photo, streams = {}, location } = req.body;
 
     if (!photo) {
       return res.status(400).json({ error: "Photo image data is required" });
     }
 
-    // Check manual override for jury/demo testing
-    if (override && override !== "auto") {
-      const fallback = generateFallbackVerification(streams, override, "photo");
-      return res.json(fallback);
-    }
-
     const ai = getGeminiClient();
     if (!ai) {
-      console.warn("GEMINI_API_KEY is not set. Using smart heuristic fallback.");
-      const fallback = generateFallbackVerification(streams, override, "photo");
-      return res.json(fallback);
+      console.error("GEMINI_API_KEY is not configured on the server.");
+      return res.status(500).json({
+        error: "Gemini API key is not configured. Please ensure GEMINI_API_KEY is set in environment variables.",
+      });
     }
 
     const parsedPhoto = parseBase64(photo, "image/jpeg");
@@ -275,51 +174,62 @@ app.post("/api/verify/photo", async (req, res) => {
       return res.status(400).json({ error: "Invalid photo format" });
     }
 
-    const activeStreams = [
-      streams.wet && "Wet Stream (Green Bin / Kitchen & Organic Waste)",
+    const activeStreamsList = [
+      streams.wet && "Wet Stream (Green Bin / Kitchen & Organic Waste, Peels, Food)",
       streams.dry && "Dry Stream (Recyclable Paper, Plastic, Cardboard, Cans)",
-      streams.sanitary && "Sanitary Waste (Wrapped securely in newspaper/pouch with red dot)",
+      streams.sanitary && "Sanitary Waste (Wrapped securely in newspaper/pouch with red mark)",
       streams.special_care && "Special Care / Hazardous (E-waste, batteries, chemicals, sharps isolated)",
-    ]
-      .filter(Boolean)
-      .join(", ");
+    ].filter(Boolean);
 
-    const systemPrompt = `You are an expert waste segregation inspection AI for the Ahmedabad Municipal Corporation (AMC) SafaiSeva civic reward program.
-Your role is to inspect the submitted photo of household waste bins and verify whether the declared waste streams are cleanly segregated according to official guidelines.
+    const activeStreams = activeStreamsList.join(", ");
 
-The user selected the following waste streams:
-${activeStreams || "None selected"}
+    const systemPrompt = `You are the strict, objective AI waste segregation verification engine for the Ahmedabad Municipal Corporation (AMC) SafaiSeva civic reward program.
+Your job is to inspect user-submitted photos of household waste to verify whether the declared waste streams are genuinely present, cleanly segregated, and unadulterated.
 
-Detailed Inspection Rules:
-1. Stream Presence & Segregation:
-   - Verify if the bins/containers or bags matching the declared streams are visible.
-   - Wet waste: Must be organic, food scraps, vegetable peels, compostable material. It MUST NOT have plastic bags or synthetic packaging mixed into the organic matter.
-   - Dry waste: Must be dry recyclables (paper, cardboard, clean bottles, cans).
-   - Sanitary waste: Must be wrapped in newspaper/paper with a red marking or safely enclosed in a sanitary pouch.
-   - Special care (Hazardous): Must be isolated in a dedicated box/bag (batteries, bulbs, electronics, medical sharps).
-2. Contamination & Cleanliness:
-   - If there is blatant cross-contamination (e.g. plastic bags inside wet bin, unwashed wet food in dry paper bin, or mixed unsegregated trash), set verified to false.
-   - If the image is unrelated, empty, or not waste bins, set verified to false and confidence to high.
-3. Confidence Determination:
-   - Set confidence to "high" when the photo is clear, well-lit, and the contents of all declared compartments can be unambiguously assessed (whether compliant or failing).
-   - Set confidence to "low" when:
-     * The photo is blurry, dark, heavily occluded, or taken at an awkward angle.
-     * It is hard to tell whether a boundary is plastic liner or shadow.
-     * You cannot be certain if an item is cross-contaminated or clean.
-     * When confidence is "low", DO NOT fail the user! Set verified to false and confidence to "low" so the app prompts them for a video or retake.
-4. Variable Credit Calculation:
-   - For verified = true (high confidence), award variable Leaf Credits based on the number and quality of verified streams:
-     * 1 credit for 1 cleanly segregated stream.
-     * 2-3 credits for standard 2-stream segregation (Wet + Dry).
-     * 3-4 credits for 3-stream segregation (Wet + Dry + Sanitary wrapped).
-     * 4-5 credits for full 4-stream segregation (Wet + Dry + Sanitary + Special Care).
-     * Award 0 credits if verified is false or confidence is low.
-5. Reason & Itemized notes:
-   - Provide a concise, polite, encouraging 1-2 sentence explanation in "reason".
-   - Provide concise notes for each stream in the streams object.`;
+CRITICAL FIRST STEP — REALITY & CONTENT CHECK:
+1. First, check if the photograph actually depicts real household waste or waste collection containers/bins/bags.
+2. If the photo shows:
+   - An empty room, blank wall, table, desk, floor, ceiling, outdoor scenery without waste,
+   - A person, selfie, screen photo, random furniture, household object, toy, pet, vehicle,
+   - Empty bins with no waste inside, or unclear dark/blurry noise,
+   YOU MUST IMMEDIATELY REJECT:
+   - "verified": false
+   - "confidence": "high"
+   - "detectedStreams": []
+   - "creditsAwarded": 0
+   - "reason": "No waste or waste containers detected in this photo. Please submit a clear photograph of your segregated waste bins."
+   - "streams": mark all streams with detected: false, verdict: "none", status: "none", note: "No waste visible in frame"
+   NEVER award credits or mark verified for empty scenes, furniture, walls, tables, or non-waste photos.
+
+STREAM COMPARISON & SEGREGATION RULES:
+If actual waste or waste containers are present, compare what is visually evident in the image against the streams declared by the user:
+Declared streams: ${activeStreams || "None selected"}
+
+- Wet Waste (લીલો કચરો): Organic kitchen waste, vegetable/fruit peels, cooked food scraps, tea leaves. Must be placed in a green bin or designated wet compartment. MUST NOT contain plastic bags, wrappers, plastic liners, thermocol, glass, or dry recyclables.
+- Dry Waste (સૂકો કચરો): Clean recyclable paper, cardboard, plastic bottles, packaging, metal cans in a blue bin or separate compartment. MUST NOT contain food scraps or liquid waste.
+- Sanitary Waste: Diapers, sanitary napkins, bandages, medical cotton securely wrapped in paper/newspaper with a red cross/dot marking or dedicated sanitary pouch.
+- Special Care (Hazardous): E-waste, batteries, tube lights, pesticide bottles, syringes/sharps safely isolated in a separate container/box.
+
+SEGREGATION DECISION LOGIC:
+- If the user selected multiple streams (e.g. Wet + Dry), BOTH streams MUST be visibly present and separated into separate containers or compartments. If waste is all mixed together in a single bin/bag without separation, set "verified": false, "creditsAwarded": 0.
+- If there is visible cross-contamination (e.g. plastic in the wet waste, wet food inside dry recyclables), set "verified": false, "creditsAwarded": 0, with a clear explanation in "reason".
+- If the declared streams are clearly segregated and compliant:
+  - Set "verified": true
+  - Set "confidence": "high"
+  - Set "detectedStreams" to the list of verified streams (e.g. ["wet", "dry"])
+  - Set "creditsAwarded" based on the count and quality of verified streams:
+    * 1 credit for 1 cleanly segregated stream.
+    * 2-3 credits for standard 2-stream segregation (Wet + Dry).
+    * 3-4 credits for 3-stream segregation (Wet + Dry + Sanitary).
+    * 4-5 credits for full 4-stream segregation (Wet + Dry + Sanitary + Special Care).
+- If the photo contains waste bins but the camera angle, shadow, or blur makes it impossible to inspect the contents with certainty:
+  - Set "verified": false, "confidence": "low", "creditsAwarded": 0
+  - "reason": Explain specifically what is ambiguous so the user can provide a video sweep or retake.
+
+Provide honest, accurate, non-fabricated observations. Do not make up positive results.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-lite",
+      model: "gemini-3.7-flash",
       contents: [
         {
           role: "user",
@@ -331,9 +241,9 @@ Detailed Inspection Rules:
               },
             },
             {
-              text: `Please verify this waste segregation photo. Selected streams: ${JSON.stringify(
+              text: `Evaluate this waste segregation photo. Selected streams declared by user: ${JSON.stringify(
                 streams
-              )}. Location: ${location?.address || "Ahmedabad"}. Evaluate compliance and return JSON according to schema.`,
+              )}. Location: ${location?.address || "Ahmedabad"}. Inspect the image strictly and return the verification decision JSON.`,
             },
           ],
         },
@@ -342,7 +252,7 @@ Detailed Inspection Rules:
         systemInstruction: systemPrompt,
         responseMimeType: "application/json",
         responseSchema: verificationSchema,
-        temperature: 0.2,
+        temperature: 0.1,
       },
     });
 
@@ -352,10 +262,8 @@ Detailed Inspection Rules:
     return res.json(result);
   } catch (error: any) {
     console.error("Gemini Photo Analysis Error:", error);
-    // Return a safe structured response on failure
     return res.status(500).json({
-      error: error.message || "Failed to analyze photo with Gemini",
-      fallback: generateFallbackVerification(req.body.streams || {}, req.body.override, "photo"),
+      error: error.message || "Failed to analyze photo with Gemini API",
     });
   }
 });
@@ -363,62 +271,49 @@ Detailed Inspection Rules:
 // Stage 2: Video Verification Endpoint
 app.post("/api/verify/video", async (req, res) => {
   try {
-    const { video, videoFrames = [], streams, location, household, override = "auto" } = req.body;
+    const { video, videoFrames = [], streams = {}, location } = req.body;
 
     if (!video && (!videoFrames || videoFrames.length === 0)) {
       return res.status(400).json({ error: "Video data or video frames are required" });
     }
 
-    // Check manual override for jury/demo testing
-    if (override && override !== "auto") {
-      const fallback = generateFallbackVerification(streams, override, "video");
-      return res.json(fallback);
-    }
-
     const ai = getGeminiClient();
     if (!ai) {
-      console.warn("GEMINI_API_KEY is not set. Using smart heuristic fallback.");
-      const fallback = generateFallbackVerification(streams, override, "video");
-      return res.json(fallback);
+      console.error("GEMINI_API_KEY is not configured on the server.");
+      return res.status(500).json({
+        error: "Gemini API key is not configured. Please ensure GEMINI_API_KEY is set in environment variables.",
+      });
     }
 
-    const activeStreams = [
-      streams.wet && "Wet Stream (Green Bin / Kitchen & Organic Waste)",
+    const activeStreamsList = [
+      streams.wet && "Wet Stream (Green Bin / Kitchen & Organic Waste, Peels, Food)",
       streams.dry && "Dry Stream (Recyclable Paper, Plastic, Cardboard, Cans)",
-      streams.sanitary && "Sanitary Waste (Wrapped securely in newspaper/pouch with red dot)",
+      streams.sanitary && "Sanitary Waste (Wrapped securely in newspaper/pouch with red mark)",
       streams.special_care && "Special Care / Hazardous (E-waste, batteries, chemicals, sharps isolated)",
-    ]
-      .filter(Boolean)
-      .join(", ");
+    ].filter(Boolean);
 
-    const systemPrompt = `You are an expert waste segregation inspection AI for the Ahmedabad Municipal Corporation (AMC) SafaiSeva civic reward program.
-The citizen was asked to provide a short video because their initial photo had low confidence or required additional verification.
+    const activeStreams = activeStreamsList.join(", ");
 
-The user selected the following waste streams:
-${activeStreams || "None selected"}
+    const systemPrompt = `You are the strict, objective AI waste segregation inspection engine for the Ahmedabad Municipal Corporation (AMC) SafaiSeva civic reward program.
+The citizen provided a short video because their initial photo had low confidence or required multi-angle inspection.
 
-Your task is to analyze the video (and/or video sequence frames) to make a definitive final verification of the waste segregation.
-
-Detailed Video Inspection Rules:
+CRITICAL FIRST STEP — REALITY & CONTENT CHECK:
 1. Examine the motion, multiple angles, and inside of all visible bins/compartments shown in the video.
-2. Verify that the declared waste streams are present and segregated without cross-contamination:
-   - Organic wet waste is pure without plastic bags.
-   - Dry recyclables are separate from organic waste.
-   - Sanitary waste is wrapped and marked.
-   - Special care items are isolated.
-3. Final Verdict:
-   - Since this is the Stage 2 Video Verification, your confidence should be "high" (unless the video is completely black/unrelated).
-   - Set verified = true if the video confirms proper segregation.
-   - Set verified = false if the video reveals cross-contamination or mixed unsegregated waste.
-4. Variable Credit Calculation:
-   - For verified = true: Award the variable Leaf Credits (1 to 5) reflecting the verified streams and thoroughness of segregation:
-     * 1 credit for 1 cleanly segregated stream.
-     * 2-3 credits for standard 2-stream segregation (Wet + Dry).
-     * 3-4 credits for 3-stream segregation (Wet + Dry + Sanitary).
-     * 4-5 credits for full 4-stream segregation (Wet + Dry + Sanitary + Special Care).
-     * 0 credits if verified = false.
-5. Reason:
-   - Provide a clear, encouraging confirmation (e.g. "Video inspection confirmed clean separation of organic and recyclable streams across all angles.") or specific reason for failure.`;
+2. If the video does NOT show real household waste or waste containers (e.g. video of floor, wall, desk, ceiling, person, room, or empty surfaces):
+   - Set "verified": false
+   - Set "confidence": "high"
+   - Set "detectedStreams": []
+   - Set "creditsAwarded": 0
+   - Set "reason": "No waste or waste containers detected in the video clip. Please capture your segregated waste bins."
+   - Mark all stream details as not detected.
+
+STREAM VERIFICATION:
+If waste containers are shown:
+User declared streams: ${activeStreams || "None selected"}
+
+- Verify that declared streams are segregated across the recorded sweep with zero cross-contamination.
+- If verified = true: award 1-5 Leaf Credits according to the verified streams.
+- If verified = false: award 0 credits and clearly state why in "reason".`;
 
     const parts: any[] = [];
 
@@ -457,7 +352,7 @@ Detailed Video Inspection Rules:
     });
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-lite",
+      model: "gemini-3.7-flash",
       contents: [
         {
           role: "user",
@@ -468,7 +363,7 @@ Detailed Video Inspection Rules:
         systemInstruction: systemPrompt,
         responseMimeType: "application/json",
         responseSchema: verificationSchema,
-        temperature: 0.2,
+        temperature: 0.1,
       },
     });
 
@@ -479,8 +374,7 @@ Detailed Video Inspection Rules:
   } catch (error: any) {
     console.error("Gemini Video Analysis Error:", error);
     return res.status(500).json({
-      error: error.message || "Failed to analyze video with Gemini",
-      fallback: generateFallbackVerification(req.body.streams || {}, req.body.override, "video"),
+      error: error.message || "Failed to analyze video with Gemini API",
     });
   }
 });

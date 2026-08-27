@@ -54,6 +54,11 @@ export interface LocationData {
   lng: number;
   address: string;
   isFallback: boolean;
+  accuracyMeters?: number;
+  landmark?: string;
+  ward?: string;
+  zone?: string;
+  source?: 'gps' | 'manual_pin' | 'manual_search' | 'fallback';
 }
 
 export interface HandoverRecord {

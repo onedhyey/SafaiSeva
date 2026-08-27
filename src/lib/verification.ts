@@ -115,7 +115,7 @@ export interface VideoVerificationOptions {
 }
 
 /**
- * Stage 1: Photo Verification via Gemini 2.5 Flash-Lite (gemini-2.5-flash-lite)
+ * Stage 1: Photo Verification via Gemini 3.7 Flash API
  */
 export async function analyse(options: VerificationOptions): Promise<VerificationResult> {
   const {
@@ -125,7 +125,6 @@ export async function analyse(options: VerificationOptions): Promise<Verificatio
     household,
     priorHandovers,
     override = 'auto',
-    timestamp = new Date(),
   } = options;
 
   // Compute image hash for anti-duplicate detection
@@ -160,8 +159,8 @@ export async function analyse(options: VerificationOptions): Promise<Verificatio
         { id: '3', label: 'Confirming location and time', detail: 'Rejected prior to metadata validation.', passed: false },
       ],
       streams: {
-        wet: { detected: true, status: 'duplicate', note: 'Identical pixel signature to prior submission', verdict: 'contaminated' },
-        dry: { detected: true, status: 'duplicate', note: 'Duplicate photo detected', verdict: 'contaminated' },
+        wet: { detected: false, status: 'duplicate', note: 'Duplicate photo detected', verdict: 'contaminated' },
+        dry: { detected: false, status: 'duplicate', note: 'Duplicate photo detected', verdict: 'contaminated' },
         sanitary: { detected: false, status: 'none', note: '—', verdict: 'none' },
         special_care: { detected: false, status: 'none', note: '—', verdict: 'none' },
       },
@@ -194,7 +193,7 @@ export async function analyse(options: VerificationOptions): Promise<Verificatio
     };
   }
 
-  // Call server Gemini 2.5 Flash-Lite API
+  // Call server Gemini API
   try {
     const res = await fetch('/api/verify/photo', {
       method: 'POST',
@@ -209,7 +208,12 @@ export async function analyse(options: VerificationOptions): Promise<Verificatio
     });
 
     if (!res.ok) {
-      throw new Error(`Server returned status ${res.status}`);
+      let errMsg = `Server returned error (${res.status})`;
+      try {
+        const errJson = await res.json();
+        if (errJson.error) errMsg = errJson.error;
+      } catch {}
+      throw new Error(errMsg);
     }
 
     const data = await res.json();
@@ -217,36 +221,36 @@ export async function analyse(options: VerificationOptions): Promise<Verificatio
     const isVerified = Boolean(data.verified);
     const confidenceScore = isConfidenceLow ? 0.62 : 0.98;
 
-    // Build stream report
+    // Build actual stream report from Gemini response
     const streamResults = {
       wet: {
-        detected: data.streams?.wet?.detected ?? streams.wet,
-        status: data.streams?.wet?.status ?? (streams.wet ? 'clean' : 'none'),
-        note: data.streams?.wet?.note ?? (streams.wet ? 'Organic kitchen waste' : 'None'),
-        verdict: (data.streams?.wet?.verdict || (streams.wet ? 'clean' : 'none')) as any,
+        detected: Boolean(data.streams?.wet?.detected),
+        status: data.streams?.wet?.status || (data.streams?.wet?.detected ? 'clean' : 'none'),
+        note: data.streams?.wet?.note || (data.streams?.wet?.detected ? 'Observed' : 'Not detected in image'),
+        verdict: (data.streams?.wet?.verdict || 'none') as any,
       },
       dry: {
-        detected: data.streams?.dry?.detected ?? streams.dry,
-        status: data.streams?.dry?.status ?? (streams.dry ? 'clean' : 'none'),
-        note: data.streams?.dry?.note ?? (streams.dry ? 'Recyclable dry items' : 'None'),
-        verdict: (data.streams?.dry?.verdict || (streams.dry ? 'clean' : 'none')) as any,
+        detected: Boolean(data.streams?.dry?.detected),
+        status: data.streams?.dry?.status || (data.streams?.dry?.detected ? 'clean' : 'none'),
+        note: data.streams?.dry?.note || (data.streams?.dry?.detected ? 'Observed' : 'Not detected in image'),
+        verdict: (data.streams?.dry?.verdict || 'none') as any,
       },
       sanitary: {
-        detected: data.streams?.sanitary?.detected ?? streams.sanitary,
-        status: data.streams?.sanitary?.status ?? (streams.sanitary ? 'wrapped' : 'none'),
-        note: data.streams?.sanitary?.note ?? (streams.sanitary ? 'Wrapped in marked paper' : 'None'),
-        verdict: (data.streams?.sanitary?.verdict || (streams.sanitary ? 'wrapped' : 'none')) as any,
+        detected: Boolean(data.streams?.sanitary?.detected),
+        status: data.streams?.sanitary?.status || (data.streams?.sanitary?.detected ? 'wrapped' : 'none'),
+        note: data.streams?.sanitary?.note || (data.streams?.sanitary?.detected ? 'Observed' : 'Not detected in image'),
+        verdict: (data.streams?.sanitary?.verdict || 'none') as any,
       },
       special_care: {
-        detected: data.streams?.special_care?.detected ?? streams.special_care,
-        status: data.streams?.special_care?.status ?? (streams.special_care ? 'safe' : 'none'),
-        note: data.streams?.special_care?.note ?? (streams.special_care ? 'Isolated in container' : 'None'),
-        verdict: (data.streams?.special_care?.verdict || (streams.special_care ? 'safe' : 'none')) as any,
+        detected: Boolean(data.streams?.special_care?.detected),
+        status: data.streams?.special_care?.status || (data.streams?.special_care?.detected ? 'safe' : 'none'),
+        note: data.streams?.special_care?.note || (data.streams?.special_care?.detected ? 'Observed' : 'Not detected in image'),
+        verdict: (data.streams?.special_care?.verdict || 'none') as any,
       },
     };
 
     if (isConfidenceLow) {
-      // Low confidence - Do not fail the user. Prompt for video or retake.
+      // Low confidence - prompt for video or retake
       return {
         status: 'needs_video',
         decisionReason: data.reason || 'Lighting, shadow, or container angles are ambiguous. Additional short video verification is requested.',
@@ -267,9 +271,7 @@ export async function analyse(options: VerificationOptions): Promise<Verificatio
     }
 
     if (isVerified) {
-      const awarded = typeof data.creditsAwarded === 'number' && data.creditsAwarded > 0
-        ? data.creditsAwarded
-        : calculateVariableCredits(streams, data.detectedStreams);
+      const awarded = Math.max(0, typeof data.creditsAwarded === 'number' ? data.creditsAwarded : 0);
 
       return {
         status: 'verified',
@@ -289,54 +291,51 @@ export async function analyse(options: VerificationOptions): Promise<Verificatio
       };
     }
 
-    // High confidence failure
+    // High confidence rejection (empty scene, non-waste, contamination, or unsegregated)
     return {
       status: 'rejected',
-      decisionReason: data.reason || 'Contamination or non-compliant separation detected in waste streams.',
+      decisionReason: data.reason || 'No valid segregated waste containers detected in the image.',
       creditsAwarded: 0,
       confidence: confidenceScore,
       confidenceLevel: 'high',
       mediaType: 'photo',
       imageHash,
-      flags: ['segregation_failed'],
+      flags: ['segregation_verification_failed'],
       stages: [
-        { id: '1', label: 'Detecting waste streams', detail: 'Declared streams evaluated in photo frame.', passed: true },
-        { id: '2', label: 'Checking for cross-contamination', detail: data.reason || 'Contaminants detected in stream container.', passed: false },
+        { id: '1', label: 'Detecting waste streams', detail: 'Waste containers evaluation completed.', passed: false },
+        { id: '2', label: 'Checking for cross-contamination', detail: data.reason || 'Segregation conditions not met.', passed: false },
         { id: '3', label: 'Confirming location and time', detail: `Location logged at ${household.address}.`, passed: true },
       ],
       streams: streamResults,
     };
-  } catch (err) {
-    console.warn('Network or API failure, falling back to local evaluation:', err);
-    // Graceful fallback
-    const streamCount = [streams.wet, streams.dry, streams.sanitary, streams.special_care].filter(Boolean).length;
-    const credits = calculateVariableCredits(streams);
+  } catch (err: any) {
+    console.error('Photo verification error:', err);
     return {
-      status: 'verified',
-      decisionReason: `All ${streamCount} declared streams confirmed cleanly segregated with zero contamination.`,
-      creditsAwarded: credits,
-      confidence: 0.96,
+      status: 'rejected',
+      decisionReason: `Verification failed: ${err.message || 'Unable to connect to Gemini AI verification service.'}`,
+      creditsAwarded: 0,
+      confidence: 0.95,
       confidenceLevel: 'high',
       mediaType: 'photo',
       imageHash,
-      flags: [],
+      flags: ['api_verification_error'],
       stages: [
-        { id: '1', label: 'Detecting waste streams', detail: 'Streams identified in photo frame.', passed: true },
-        { id: '2', label: 'Checking for cross-contamination', detail: 'Compartments free of cross-contamination.', passed: true },
-        { id: '3', label: 'Confirming location and time', detail: `Verified at ${household.address}.`, passed: true },
+        { id: '1', label: 'Detecting waste streams', detail: 'Analysis failed due to service error.', passed: false },
+        { id: '2', label: 'Checking for cross-contamination', detail: 'Verification could not be completed.', passed: false },
+        { id: '3', label: 'Confirming location and time', detail: `Logged at ${household.address}.`, passed: false },
       ],
       streams: {
-        wet: { detected: streams.wet, status: streams.wet ? 'clean' : 'none', note: streams.wet ? 'Clean, no plastic detected' : 'None', verdict: streams.wet ? 'clean' : 'none' },
-        dry: { detected: streams.dry, status: streams.dry ? 'clean' : 'none', note: streams.dry ? 'Clean paper & containers' : 'None', verdict: streams.dry ? 'clean' : 'none' },
-        sanitary: { detected: streams.sanitary, status: streams.sanitary ? 'wrapped' : 'none', note: streams.sanitary ? 'Wrapped in newspaper' : 'None', verdict: streams.sanitary ? 'wrapped' : 'none' },
-        special_care: { detected: streams.special_care, status: streams.special_care ? 'safe' : 'none', note: streams.special_care ? 'Isolated in container' : 'None', verdict: streams.special_care ? 'safe' : 'none' },
+        wet: { detected: false, status: 'none', note: 'Not verified', verdict: 'none' },
+        dry: { detected: false, status: 'none', note: 'Not verified', verdict: 'none' },
+        sanitary: { detected: false, status: 'none', note: 'Not verified', verdict: 'none' },
+        special_care: { detected: false, status: 'none', note: 'Not verified', verdict: 'none' },
       },
     };
   }
 }
 
 /**
- * Stage 2: Video Verification via Gemini 2.5 Flash-Lite (gemini-2.5-flash-lite)
+ * Stage 2: Video Verification via Gemini 3.7 Flash API
  */
 export async function analyseVideo(options: VideoVerificationOptions): Promise<VerificationResult> {
   const {
@@ -365,7 +364,12 @@ export async function analyseVideo(options: VideoVerificationOptions): Promise<V
     });
 
     if (!res.ok) {
-      throw new Error(`Server returned status ${res.status}`);
+      let errMsg = `Server returned error (${res.status})`;
+      try {
+        const errJson = await res.json();
+        if (errJson.error) errMsg = errJson.error;
+      } catch {}
+      throw new Error(errMsg);
     }
 
     const data = await res.json();
@@ -373,35 +377,33 @@ export async function analyseVideo(options: VideoVerificationOptions): Promise<V
 
     const streamResults = {
       wet: {
-        detected: data.streams?.wet?.detected ?? streams.wet,
-        status: data.streams?.wet?.status ?? (streams.wet ? 'clean' : 'none'),
-        note: data.streams?.wet?.note ?? (streams.wet ? 'Clean organic waste verified across video' : 'None'),
-        verdict: (data.streams?.wet?.verdict || (streams.wet ? 'clean' : 'none')) as any,
+        detected: Boolean(data.streams?.wet?.detected),
+        status: data.streams?.wet?.status || (data.streams?.wet?.detected ? 'clean' : 'none'),
+        note: data.streams?.wet?.note || (data.streams?.wet?.detected ? 'Observed in video' : 'Not detected in video'),
+        verdict: (data.streams?.wet?.verdict || 'none') as any,
       },
       dry: {
-        detected: data.streams?.dry?.detected ?? streams.dry,
-        status: data.streams?.dry?.status ?? (streams.dry ? 'clean' : 'none'),
-        note: data.streams?.dry?.note ?? (streams.dry ? 'Clean dry recyclables verified across video' : 'None'),
-        verdict: (data.streams?.dry?.verdict || (streams.dry ? 'clean' : 'none')) as any,
+        detected: Boolean(data.streams?.dry?.detected),
+        status: data.streams?.dry?.status || (data.streams?.dry?.detected ? 'clean' : 'none'),
+        note: data.streams?.dry?.note || (data.streams?.dry?.detected ? 'Observed in video' : 'Not detected in video'),
+        verdict: (data.streams?.dry?.verdict || 'none') as any,
       },
       sanitary: {
-        detected: data.streams?.sanitary?.detected ?? streams.sanitary,
-        status: data.streams?.sanitary?.status ?? (streams.sanitary ? 'wrapped' : 'none'),
-        note: data.streams?.sanitary?.note ?? (streams.sanitary ? 'Sanitary package securely wrapped' : 'None'),
-        verdict: (data.streams?.sanitary?.verdict || (streams.sanitary ? 'wrapped' : 'none')) as any,
+        detected: Boolean(data.streams?.sanitary?.detected),
+        status: data.streams?.sanitary?.status || (data.streams?.sanitary?.detected ? 'wrapped' : 'none'),
+        note: data.streams?.sanitary?.note || (data.streams?.sanitary?.detected ? 'Observed in video' : 'Not detected in video'),
+        verdict: (data.streams?.sanitary?.verdict || 'none') as any,
       },
       special_care: {
-        detected: data.streams?.special_care?.detected ?? streams.special_care,
-        status: data.streams?.special_care?.status ?? (streams.special_care ? 'safe' : 'none'),
-        note: data.streams?.special_care?.note ?? (streams.special_care ? 'Hazardous item safely isolated' : 'None'),
-        verdict: (data.streams?.special_care?.verdict || (streams.special_care ? 'safe' : 'none')) as any,
+        detected: Boolean(data.streams?.special_care?.detected),
+        status: data.streams?.special_care?.status || (data.streams?.special_care?.detected ? 'safe' : 'none'),
+        note: data.streams?.special_care?.note || (data.streams?.special_care?.detected ? 'Observed in video' : 'Not detected in video'),
+        verdict: (data.streams?.special_care?.verdict || 'none') as any,
       },
     };
 
     if (isVerified) {
-      const awarded = typeof data.creditsAwarded === 'number' && data.creditsAwarded > 0
-        ? data.creditsAwarded
-        : calculateVariableCredits(streams, data.detectedStreams);
+      const awarded = Math.max(0, typeof data.creditsAwarded === 'number' ? data.creditsAwarded : 0);
 
       return {
         status: 'verified',
@@ -413,7 +415,7 @@ export async function analyseVideo(options: VideoVerificationOptions): Promise<V
         imageHash,
         flags: ['verified_via_video_analysis'],
         stages: [
-          { id: '1', label: 'Multi-angle stream sweep', detail: '360° motion video confirmed all stream bins.', passed: true },
+          { id: '1', label: 'Multi-angle stream sweep', detail: 'Motion video confirmed all stream bins.', passed: true },
           { id: '2', label: 'Deep cross-contamination check', detail: 'Zero cross-contamination confirmed inside containers.', passed: true },
           { id: '3', label: 'GPS polygon and time lock', detail: `Confirmed at ${household.address}.`, passed: true },
         ],
@@ -423,7 +425,7 @@ export async function analyseVideo(options: VideoVerificationOptions): Promise<V
 
     return {
       status: 'rejected',
-      decisionReason: data.reason || 'Video analysis identified non-segregated or contaminated waste.',
+      decisionReason: data.reason || 'Video analysis identified non-segregated or non-compliant waste.',
       creditsAwarded: 0,
       confidence: 0.96,
       confidenceLevel: 'high',
@@ -431,34 +433,33 @@ export async function analyseVideo(options: VideoVerificationOptions): Promise<V
       imageHash,
       flags: ['video_verification_failed'],
       stages: [
-        { id: '1', label: 'Multi-angle stream sweep', detail: 'Video inspected across recorded motion.', passed: true },
-        { id: '2', label: 'Deep cross-contamination check', detail: data.reason || 'Contamination observed in video stream.', passed: false },
+        { id: '1', label: 'Multi-angle stream sweep', detail: 'Video inspected across recorded motion.', passed: false },
+        { id: '2', label: 'Deep cross-contamination check', detail: data.reason || 'Segregation requirements not met.', passed: false },
         { id: '3', label: 'GPS polygon and time lock', detail: `Location logged at ${household.address}.`, passed: true },
       ],
       streams: streamResults,
     };
-  } catch (err) {
-    console.warn('Video verification network fallback:', err);
-    const credits = calculateVariableCredits(streams);
+  } catch (err: any) {
+    console.error('Video verification error:', err);
     return {
-      status: 'verified',
-      decisionReason: 'Video sweep confirmed clean segregation of all declared waste streams with zero contamination.',
-      creditsAwarded: credits,
-      confidence: 0.98,
+      status: 'rejected',
+      decisionReason: `Video verification failed: ${err.message || 'Unable to connect to Gemini AI verification service.'}`,
+      creditsAwarded: 0,
+      confidence: 0.95,
       confidenceLevel: 'high',
       mediaType: 'video',
       imageHash,
-      flags: ['verified_via_video_fallback'],
+      flags: ['api_video_error'],
       stages: [
-        { id: '1', label: 'Multi-angle stream sweep', detail: 'Video motion validated stream containers.', passed: true },
-        { id: '2', label: 'Deep cross-contamination check', detail: 'Zero contamination detected in video stream.', passed: true },
-        { id: '3', label: 'GPS polygon and time lock', detail: `Confirmed at ${household.address}.`, passed: true },
+        { id: '1', label: 'Multi-angle stream sweep', detail: 'Video analysis failed due to service error.', passed: false },
+        { id: '2', label: 'Deep cross-contamination check', detail: 'Verification could not be completed.', passed: false },
+        { id: '3', label: 'GPS polygon and time lock', detail: `Confirmed at ${household.address}.`, passed: false },
       ],
       streams: {
-        wet: { detected: streams.wet, status: streams.wet ? 'clean' : 'none', note: streams.wet ? 'Clean organic waste verified' : 'None', verdict: streams.wet ? 'clean' : 'none' },
-        dry: { detected: streams.dry, status: streams.dry ? 'clean' : 'none', note: streams.dry ? 'Clean dry recyclables verified' : 'None', verdict: streams.dry ? 'clean' : 'none' },
-        sanitary: { detected: streams.sanitary, status: streams.sanitary ? 'wrapped' : 'none', note: streams.sanitary ? 'Wrapped in newspaper' : 'None', verdict: streams.sanitary ? 'wrapped' : 'none' },
-        special_care: { detected: streams.special_care, status: streams.special_care ? 'safe' : 'none', note: streams.special_care ? 'Isolated container' : 'None', verdict: streams.special_care ? 'safe' : 'none' },
+        wet: { detected: false, status: 'none', note: 'Not verified', verdict: 'none' },
+        dry: { detected: false, status: 'none', note: 'Not verified', verdict: 'none' },
+        sanitary: { detected: false, status: 'none', note: 'Not verified', verdict: 'none' },
+        special_care: { detected: false, status: 'none', note: 'Not verified', verdict: 'none' },
       },
     };
   }
