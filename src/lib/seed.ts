@@ -367,7 +367,7 @@ export function initialSeedData(): {
   const settings: DemoSettings = {
     aiOutcomeOverride: 'auto',
     simulateOffline: false,
-    theme: 'dark',
+    theme: 'light',
   };
 
   return {

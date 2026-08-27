@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import sharp from 'sharp';
 
 const outDir = path.resolve('public');
 if (!fs.existsSync(outDir)) {
@@ -76,6 +75,18 @@ function createSvg({ size = 512, isMaskable = false, isAppleTouch = false, isFav
 }
 
 async function generateAll() {
+  let sharpModule;
+  try {
+    const imported = await import('sharp');
+    sharpModule = imported.default || imported;
+  } catch {
+    console.warn('Optional package "sharp" is not installed. Icon PNG generation skipped. SVG favicon updated.');
+    const faviconSvg = createSvg({ size: 100, isFavicon: true });
+    fs.writeFileSync(path.join(outDir, 'favicon.svg'), faviconSvg);
+    return;
+  }
+
+  const sharp = sharpModule;
   console.log('Generating SafaiSeva icons and assets with sharp...');
 
   // 1. Favicon SVG

@@ -142,11 +142,11 @@ export const LoginView: React.FC = () => {
         ) : (
           <button
             onClick={() => handleQuickLogin()}
-            className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-medium py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40 transition-all cursor-pointer group"
+            className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 !text-white font-medium py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40 transition-all cursor-pointer group"
           >
-            <LogIn size={15} className="group-hover:translate-x-0.5 transition-transform" />
-            <span>Log in / Sign up to SafaiSeva</span>
-            <ArrowRight size={14} className="text-emerald-200" />
+            <LogIn size={15} className="!text-white text-white shrink-0 group-hover:translate-x-0.5 transition-transform" />
+            <span className="!text-white text-white">Log in / Sign up to SafaiSeva</span>
+            <ArrowRight size={14} className="!text-white text-white shrink-0" />
           </button>
         )}
 

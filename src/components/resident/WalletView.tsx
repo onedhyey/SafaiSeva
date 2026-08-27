@@ -91,7 +91,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
           <span>Document today&apos;s handover</span>
         </button>
         <p className="text-[11px] text-center text-muted-l mt-1.5">
-          2 credits per verified 4-stream morning collection
+          Variable Leaf Credits per AI verified segregated collection
         </p>
       </div>
 
@@ -162,7 +162,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
                           size={12}
                           color={isVerified ? '#19A85B' : isInReview ? '#F0A83C' : '#5B6B61'}
                         />
-                        <span>{isVerified ? '+2' : isInReview ? 'Held' : '0'}</span>
+                        <span>{isVerified ? `+${h.creditsAwarded ?? 2}` : isInReview ? 'Held' : '0'}</span>
                       </div>
                       <div className="text-[10px] text-muted-l font-mono">
                         {new Date(h.timestamp).toLocaleTimeString('en-IN', {

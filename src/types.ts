@@ -9,7 +9,9 @@ export interface StreamChecklist {
   special_care: boolean;
 }
 
-export type HandoverStatus = 'verified' | 'in_review' | 'rejected';
+export type HandoverStatus = 'verified' | 'in_review' | 'rejected' | 'needs_video';
+
+export type ConfidenceLevel = 'high' | 'low';
 
 export type StreamVerdict = 'clean' | 'contaminated' | 'wrapped' | 'unwrapped' | 'safe' | 'none';
 
@@ -32,6 +34,10 @@ export interface VerificationResult {
   decisionReason: string;
   creditsAwarded: number;
   confidence: number;
+  confidenceLevel?: ConfidenceLevel;
+  detectedStreams?: string[];
+  requiresVideo?: boolean;
+  mediaType?: 'photo' | 'video';
   stages: VerificationStageResult[];
   streams: {
     wet: StreamAnalysisItem;
