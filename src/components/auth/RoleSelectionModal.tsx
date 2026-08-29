@@ -30,7 +30,7 @@ export const RoleSelectionModal: React.FC<RoleSelectionModalProps> = ({
   onClose,
   canCancel = false,
 }) => {
-  const { user, setSelectedRole } = useAuth();
+  const { user, setSelectedRole, authEnabled } = useAuth();
 
   // Sub-stages: 'select' | 'karmachari_code' | 'officer_code'
   const [stage, setStage] = useState<'select' | 'karmachari_code' | 'officer_code'>('select');
@@ -174,7 +174,7 @@ export const RoleSelectionModal: React.FC<RoleSelectionModalProps> = ({
             </div>
           </div>
           <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-800/60 px-1.5 py-0.5 rounded shrink-0">
-            AUTHENTICATED
+            {authEnabled ? 'AUTHENTICATED' : 'DEMO SESSION'}
           </span>
         </div>
 

@@ -1,11 +1,14 @@
 import React from 'react';
 import { HouseholdProfile, HandoverRecord } from '../../types';
 import { LeafGlyph } from '../LeafGlyph';
-import { Camera, Check, Clock, AlertCircle, ChevronRight, Flame } from 'lucide-react';
+import { Camera, Check, Clock, AlertCircle, ChevronRight, Flame, Trash2 } from 'lucide-react';
+import { BinsInfo } from '../../lib/api';
 
 interface WalletViewProps {
   household: HouseholdProfile;
   handovers: HandoverRecord[];
+  bins?: BinsInfo | null;
+  onOpenBinSetup?: () => void;
   onNavigateToDocument: () => void;
   onSelectHandover: (handover: HandoverRecord) => void;
 }
@@ -13,6 +16,8 @@ interface WalletViewProps {
 export const WalletView: React.FC<WalletViewProps> = ({
   household,
   handovers,
+  bins,
+  onOpenBinSetup,
   onNavigateToDocument,
   onSelectHandover,
 }) => {
@@ -80,6 +85,41 @@ export const WalletView: React.FC<WalletViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Bin setup progress (audit P1) */}
+      {bins && (
+        <button
+          onClick={onOpenBinSetup}
+          className="w-full bg-ink-soft border border-muted/30 rounded-lg p-4 text-left hover:border-green/50 transition-colors cursor-pointer"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-sm bg-green/10 border border-green/30 text-green flex items-center justify-center">
+                <Trash2 size={14} />
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-white">
+                  {bins.count} of {bins.target} bins at home
+                </div>
+                <div className="text-[11px] text-muted-l">
+                  {bins.count >= bins.target
+                    ? 'Full four-stream setup — nicely done'
+                    : bins.count >= 2
+                    ? `Add ${bins.target - bins.count} more to reach the four-bin bonus (+${bins.milestoneCredits.four_bins})`
+                    : `Reach 2 bins for +${bins.milestoneCredits.two_bins} leaves`}
+                </div>
+              </div>
+            </div>
+            <ChevronRight size={16} className="text-muted shrink-0" />
+          </div>
+          <div className="w-full bg-ink h-1.5 rounded-sm overflow-hidden border border-muted/30 mt-2.5">
+            <div
+              className="bg-green h-full rounded-xs transition-all"
+              style={{ width: `${Math.min(1, bins.count / bins.target) * 100}%` }}
+            />
+          </div>
+        </button>
+      )}
 
       {/* Primary Action Button */}
       <div>

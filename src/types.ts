@@ -119,6 +119,9 @@ export interface HouseholdProfile {
   totalKgDiverted: number;
   ridesTaken: number;
   lastHandoverDate?: string;
+  /** Separated bins the household keeps at home (audit P1). */
+  binCount?: number;
+  binTarget?: number;
 }
 
 export interface KarmachariProfile {
