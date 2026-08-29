@@ -30,12 +30,17 @@ interface HouseholdCtx {
   id: string;
   code: string;
   collectionWindow: { start: number; end: number };
+  binCount: number;
+  binTarget: number;
+  binsOnboardedAt: string | null;
 }
 
 async function householdForUser(userId: string): Promise<HouseholdCtx | null> {
   const { data } = await admin()
     .from('household_members')
-    .select('household:households(id, code, collection_start_hour, collection_end_hour)')
+    .select(
+      'household:households(id, code, collection_start_hour, collection_end_hour, bin_count, bin_target, bins_onboarded_at)'
+    )
     .eq('user_id', userId)
     .limit(1)
     .maybeSingle();
@@ -48,6 +53,9 @@ async function householdForUser(userId: string): Promise<HouseholdCtx | null> {
       start: hh.collection_start_hour ?? 6,
       end: hh.collection_end_hour ?? 12,
     },
+    binCount: hh.bin_count ?? 1,
+    binTarget: hh.bin_target ?? 4,
+    binsOnboardedAt: hh.bins_onboarded_at ?? null,
   };
 }
 
@@ -83,6 +91,8 @@ export function mountApiRoutes(app: Express) {
           .limit(20),
       ]);
 
+      const { rules } = await activeRules();
+
       return res.json({
         householdCode: hh.code,
         balance: bal?.settled_balance ?? 0,
@@ -90,9 +100,88 @@ export function mountApiRoutes(app: Express) {
         lifetimeEarned: bal?.lifetime_earned ?? 0,
         handovers: handovers ?? [],
         tickets: tickets ?? [],
+        bins: {
+          count: hh.binCount,
+          target: hh.binTarget,
+          onboarded: hh.binsOnboardedAt != null,
+          milestoneCredits: rules.milestones, // { two_bins, four_bins }
+        },
+        redeem: rules.redeem, // { janmarg_brts, ahmedabad_metro, janmarg_day_pass }
       });
     } catch (e: any) {
       return fail(res, e.status ?? 500, e.message ?? 'wallet error');
+    }
+  });
+
+  // ---------------------------------------------------------------------------------
+  // POST /api/household/bins — set how many separated bins the home has (audit P1).
+  //   body: { binCount: 0..8 }
+  // Crossing 2 bins -> two_bins milestone credit; crossing 4 -> four_bins. Each is
+  // awarded once (bin_milestones unique per household+milestone), settled immediately.
+  // ---------------------------------------------------------------------------------
+  app.post('/api/household/bins', async (req: Request, res: Response) => {
+    try {
+      const principal = await resolvePrincipal(req);
+      const hh = await householdForUser(principal.userId);
+      if (!hh) return fail(res, 409, 'No household is linked to this session.');
+
+      const raw = Number(req.body?.binCount);
+      if (!Number.isFinite(raw) || raw < 0 || raw > 8) {
+        return fail(res, 400, 'binCount must be between 0 and 8.');
+      }
+      const newCount = Math.round(raw);
+      const oldCount = hh.binCount;
+
+      const db = admin();
+      const { rules } = await activeRules();
+
+      const crossed: { milestone: 'two_bins' | 'four_bins'; credits: number }[] = [];
+      if (oldCount < 2 && newCount >= 2)
+        crossed.push({ milestone: 'two_bins', credits: rules.milestones.two_bins });
+      if (oldCount < 4 && newCount >= 4)
+        crossed.push({ milestone: 'four_bins', credits: rules.milestones.four_bins });
+
+      const awarded: { milestone: string; credits: number }[] = [];
+      for (const c of crossed) {
+        const { error: msErr } = await db
+          .from('bin_milestones')
+          .insert({ household_id: hh.id, milestone: c.milestone, credits_awarded: c.credits });
+        if (msErr) {
+          if (/duplicate key/i.test(msErr.message)) continue; // already awarded
+          console.error('[bins] milestone insert:', msErr.message);
+          continue;
+        }
+        const { error: ledErr } = await db.from('credit_ledger').insert({
+          household_id: hh.id,
+          entry_type: 'milestone',
+          amount: c.credits,
+          reason: `${c.milestone === 'two_bins' ? 'Two-bin' : 'Four-bin'} setup milestone`,
+          effective_at: new Date().toISOString(),
+          created_by: principal.userId,
+        });
+        if (ledErr) console.error('[bins] ledger insert:', ledErr.message);
+        else awarded.push({ milestone: c.milestone, credits: c.credits });
+      }
+
+      await db
+        .from('households')
+        .update({ bin_count: newCount, bins_onboarded_at: new Date().toISOString() })
+        .eq('id', hh.id);
+
+      const { data: bal } = await db
+        .from('v_household_balance')
+        .select('settled_balance')
+        .eq('household_id', hh.id)
+        .maybeSingle();
+
+      return res.json({
+        binCount: newCount,
+        binTarget: hh.binTarget,
+        milestonesAwarded: awarded,
+        balance: bal?.settled_balance ?? 0,
+      });
+    } catch (e: any) {
+      return fail(res, e.status ?? 500, e.message ?? 'bins error');
     }
   });
 

@@ -21,8 +21,9 @@ import {
   resetDatabase,
 } from './lib/db';
 import { useAuth } from './lib/authContext';
-import { getWallet } from './lib/api';
+import { getWallet, BinsInfo } from './lib/api';
 import { serverHandoverToRecord } from './lib/serverMap';
+import { BinSetupModal } from './components/resident/BinSetupModal';
 import { RoleSwitcher } from './components/RoleSwitcher';
 import { BottomNav, ResidentTab } from './components/BottomNav';
 import { InstallAppFooter } from './components/InstallAppFooter';
@@ -60,6 +61,10 @@ export default function App() {
   const [isRoleModalOpen, setIsRoleModalOpen] = useState<boolean>(false);
   const [selectedTicket, setSelectedTicket] = useState<TicketRecord | null>(null);
   const [selectedHandover, setSelectedHandover] = useState<HandoverRecord | null>(null);
+
+  // Bin onboarding (audit P1)
+  const [bins, setBins] = useState<BinsInfo | null>(null);
+  const [binModalOpen, setBinModalOpen] = useState<boolean>(false);
 
   const currentTheme: AppTheme = settings.theme || 'light';
 
@@ -99,7 +104,12 @@ export default function App() {
       try {
         const wallet = await getWallet();
         if (wallet.householdCode) {
-          mergedHousehold = { ...hh, balance: wallet.balance };
+          mergedHousehold = {
+            ...hh,
+            balance: wallet.balance,
+            binCount: wallet.bins?.count ?? hh.binCount,
+            binTarget: wallet.bins?.target ?? hh.binTarget,
+          };
           const serverRecords = wallet.handovers.map((sh) => serverHandoverToRecord(sh, hh));
           // Server handovers for this household + seeded items for OTHER households
           // (the karmachari review queue).
@@ -107,6 +117,8 @@ export default function App() {
             ...serverRecords,
             ...hnds.filter((h) => h.householdId !== hh.id),
           ];
+          setBins(wallet.bins ?? null);
+          if (wallet.bins && !wallet.bins.onboarded) setBinModalOpen(true);
         }
       } catch (e) {
         console.warn('Wallet API unavailable — showing local state only.', e);
@@ -234,6 +246,8 @@ export default function App() {
                     <WalletView
                       household={activeHousehold}
                       handovers={handovers}
+                      bins={bins}
+                      onOpenBinSetup={() => setBinModalOpen(true)}
                       onNavigateToDocument={() => setResidentTab('document')}
                       onSelectHandover={(h) => setSelectedHandover(h)}
                     />
@@ -335,6 +349,20 @@ export default function App() {
         isOpen={!!selectedHandover}
         onClose={() => setSelectedHandover(null)}
       />
+
+      {/* Bin setup / onboarding (audit P1) */}
+      {inApp && activeRole === 'resident' && bins && (
+        <BinSetupModal
+          isOpen={binModalOpen || !bins.onboarded}
+          bins={bins}
+          onboarding={!bins.onboarded}
+          onClose={() => setBinModalOpen(false)}
+          onSaved={async () => {
+            setBinModalOpen(false);
+            await loadData();
+          }}
+        />
+      )}
     </div>
   );
 }

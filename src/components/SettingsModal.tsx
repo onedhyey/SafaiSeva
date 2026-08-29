@@ -210,42 +210,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
 
-          {/* AI Outcome Selector */}
+          {/* Verification is server-authoritative — no client-side outcome override */}
           <div className="mt-4">
-            <label className="block text-xs font-semibold text-white mb-2">
-              Simulate AI Analysis Outcome
+            <label className="block text-xs font-semibold text-white mb-1.5">
+              AI verification
             </label>
-            <div className="space-y-1.5">
-              {overrideOptions.map((opt) => {
-                const active = aiOverride === opt.id;
-                const Icon = opt.icon;
-                return (
-                  <button
-                    key={opt.id}
-                    id={`override-${opt.id}-btn`}
-                    onClick={() => onUpdateOverride(opt.id)}
-                    className={`w-full text-left p-2.5 rounded-lg border transition-colors flex items-start gap-2.5 cursor-pointer ${
-                      active
-                        ? 'bg-zinc-800 border-emerald-500 text-white shadow-xs'
-                        : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
-                    }`}
-                  >
-                    <Icon size={16} className={`shrink-0 mt-0.5 ${opt.color}`} />
-                    <div>
-                      <div className="text-xs font-medium text-white">{opt.label}</div>
-                      <div className="text-[11px] text-zinc-400">{opt.desc}</div>
-                    </div>
-                  </button>
-                );
-              })}
+            <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-[11px] text-zinc-400 leading-relaxed">
+              Every submission is judged by the backend from real AI evidence, fraud checks,
+              location and time — there is no demo override. To see a rejection, submit
+              something that isn’t segregated waste.
             </div>
           </div>
 
-          {/* Reset Demo Button */}
+          {/* Reset local demo state */}
           <div className="mt-5 pt-3.5 border-t border-zinc-800 flex items-center justify-between gap-3">
             <div>
-              <div className="text-xs font-medium text-white">Reset Demo State</div>
-              <div className="text-[11px] text-zinc-400">Wipes IndexedDB & re-seeds 3 weeks of data</div>
+              <div className="text-xs font-medium text-white">Reset local demo data</div>
+              <div className="text-[11px] text-zinc-400">
+                Clears this device’s cached seed data. Server handovers and credits are not affected.
+              </div>
             </div>
             <button
               id="reset-demo-action-btn"

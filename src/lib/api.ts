@@ -4,6 +4,13 @@
 
 import { getDeviceId } from './authContext';
 
+export interface BinsInfo {
+  count: number;
+  target: number;
+  onboarded: boolean;
+  milestoneCredits: { two_bins: number; four_bins: number };
+}
+
 export interface WalletResponse {
   householdCode: string | null;
   balance: number;
@@ -11,6 +18,15 @@ export interface WalletResponse {
   lifetimeEarned?: number;
   handovers: ServerHandover[];
   tickets: any[];
+  bins?: BinsInfo;
+  redeem?: Record<string, number>;
+}
+
+export interface SetBinsResponse {
+  binCount: number;
+  binTarget: number;
+  milestonesAwarded: { milestone: string; credits: number }[];
+  balance: number;
 }
 
 export interface ServerHandover {
@@ -102,5 +118,12 @@ export function disputeHandover(id: string, note: string): Promise<{ status: str
   return apiFetch(`/api/handovers/${id}/dispute`, {
     method: 'POST',
     body: JSON.stringify({ note }),
+  });
+}
+
+export function setBinCount(binCount: number): Promise<SetBinsResponse> {
+  return apiFetch<SetBinsResponse>('/api/household/bins', {
+    method: 'POST',
+    body: JSON.stringify({ binCount }),
   });
 }
