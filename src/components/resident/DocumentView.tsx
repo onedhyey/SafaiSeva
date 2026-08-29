@@ -870,18 +870,24 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
               </button>
             </div>
             <div className="flex items-center justify-between pt-1.5 border-t border-muted/15 text-[11px]">
-              <span className="text-muted-l">Reward Rate:</span>
-              <span className="text-green font-mono font-medium">Variable 1–5 Leaf Credits by AI</span>
+              <span className="text-muted-l">Reward rate:</span>
+              <span className="text-green font-mono font-medium">1 leaf per confirmed stream · 2–4 per handover</span>
             </div>
           </div>
+
+          {selectedStreamCount < 2 && (
+            <p className="text-[11px] text-amber text-center">
+              Select at least two streams — wet and dry at minimum.
+            </p>
+          )}
 
           {/* Verify with AI Button */}
           <button
             type="button"
             onClick={handleVerifyPhoto}
-            disabled={selectedStreamCount === 0}
+            disabled={selectedStreamCount < 2}
             className={`w-full font-semibold text-sm py-3.5 px-4 rounded-md transition-colors flex items-center justify-center gap-2 shadow-xs min-h-[48px] ${
-              selectedStreamCount === 0
+              selectedStreamCount < 2
                 ? 'bg-ink-soft text-muted border border-muted/30 cursor-not-allowed'
                 : 'bg-green hover:bg-[#16934f] text-ink cursor-pointer'
             }`}

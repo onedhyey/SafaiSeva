@@ -16,12 +16,11 @@ insert into public.reward_rules (version, active, note, rules)
 values (
   1, true, 'Pilot defaults. Milestone-weighted per audit assumption B.',
   jsonb_build_object(
-    'per_confirmed_stream',   1,        -- 1 credit per stream the AI actually confirms
-    'combo_bonus',            jsonb_build_object('wet_dry', 1),   -- +1 if wet AND dry both confirmed
-    'full_four_bonus',        1,        -- +1 if all four streams confirmed
-    'daily_cap_credits',      5,        -- max credits from a single daily handover
+    'per_confirmed_stream',   1,        -- +1 per stream the AI confirms; no combo/full-set bonus
+    'daily_cap_credits',      4,        -- ceiling per handover (2 declared min .. 4 max)
+    'min_declared_streams',   2,        -- must separate at least wet + dry to submit
     'settlement_hold_hours',  24,       -- earned credits are spendable after this (audit C6/E)
-    'milestones',             jsonb_build_object('two_bins', 10, 'four_bins', 20),
+    'milestones',             jsonb_build_object('two_bins', 5, 'four_bins', 10, 'six_bins', 20),
     'worker_issue_credits',   2,        -- flat credits for a verified no-app issuance (audit I7)
     'recapture_block_at',     0.75,     -- recapture_likelihood >= this -> auto-reject (audit A1)
     'review_confidence_band', jsonb_build_object('low', 0.45, 'high', 0.75),

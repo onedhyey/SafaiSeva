@@ -62,11 +62,8 @@ const HARD_BLOCKS: ReasonCode[] = [
 ];
 
 function computeCredits(confirmed: WasteStream[], rules: RewardRules): number {
-  if (confirmed.length === 0) return 0;
-  let c = confirmed.length * rules.per_confirmed_stream;
-  if (confirmed.includes('wet') && confirmed.includes('dry')) c += rules.combo_bonus.wet_dry ?? 0;
-  if (confirmed.length === 4) c += rules.full_four_bonus;
-  return Math.max(1, Math.min(c, rules.daily_cap_credits));
+  // +1 per stream the AI confirmed, up to the daily ceiling. No combo/full-set bonus.
+  return Math.min(confirmed.length * rules.per_confirmed_stream, rules.daily_cap_credits);
 }
 
 export function adjudicate(input: AdjudicateInput): Decision {
@@ -79,14 +76,14 @@ export function adjudicate(input: AdjudicateInput): Decision {
   const render = (code: ReasonCode, streams?: string[]) =>
     renderReason(code, { lang, streams, window: windowLabel });
 
-  // --- nothing declared: terminal, nothing else is worth saying ---
-  if (declaredStreams.length === 0) {
-    const r = render('NO_STREAMS_DECLARED');
+  // --- too few streams declared: terminal (you must separate at least wet + dry) ---
+  if (declaredStreams.length < (rules.min_declared_streams ?? 2)) {
+    const r = render('TOO_FEW_STREAMS');
     return {
       status: 'rejected',
       confirmedStreams: [],
       creditsAwarded: 0,
-      reasonCode: 'NO_STREAMS_DECLARED',
+      reasonCode: 'TOO_FEW_STREAMS',
       reasonText: r.text,
       fix: r.fix,
       otherReasons: [],

@@ -107,7 +107,7 @@ create table if not exists public.bin_milestones (
   evidence_handover_id uuid references public.handovers(id) on delete set null,
   credits_awarded      integer not null default 0,
   unique (household_id, milestone),
-  constraint bin_milestones_valid check (milestone in ('two_bins','four_bins'))
+  constraint bin_milestones_valid check (milestone in ('two_bins','four_bins','six_bins'))
 );
 
 -- ---------------------------------------------------------------------------------------

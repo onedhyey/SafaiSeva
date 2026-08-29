@@ -69,6 +69,12 @@ export const REASONS = {
     en: 'Select at least one waste stream that is visible in your photo.',
     gu: 'તમારા ફોટામાં દેખાતો ઓછામાં ઓછો એક કચરાનો પ્રવાહ પસંદ કરો.',
   },
+  TOO_FEW_STREAMS: {
+    en: 'Select at least two streams — you must separate wet and dry waste to log a handover.',
+    gu: 'ઓછામાં ઓછા બે પ્રવાહ પસંદ કરો — હૅન્ડઓવર નોંધવા માટે ભીનો અને સૂકો કચરો અલગ કરવો જરૂરી છે.',
+    fix_en: 'Separate at least wet and dry, select both, then submit.',
+    fix_gu: 'ઓછામાં ઓછા ભીનો અને સૂકો અલગ કરો, બંને પસંદ કરો, પછી સબમિટ કરો.',
+  },
   DUPLICATE_EVIDENCE: {
     en: 'Verification failed: this image closely matches a previous submission.',
     gu: 'ચકાસણી નિષ્ફળ: આ છબી અગાઉના સબમિશન સાથે ખૂબ મળતી આવે છે.',
