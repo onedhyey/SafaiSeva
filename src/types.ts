@@ -47,6 +47,8 @@ export interface VerificationResult {
   };
   flags: string[];
   imageHash: string;
+  /** Server-generated handover id (present once the backend has created the row). */
+  handoverId?: string;
 }
 
 export interface LocationData {

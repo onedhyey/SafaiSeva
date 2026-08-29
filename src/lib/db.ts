@@ -10,13 +10,13 @@ import {
 import { initialSeedData } from './seed';
 
 const STORAGE_KEYS = {
-  HOUSEHOLD: 'safaispot_household_profile',
-  HANDOVERS: 'safaispot_handovers_v1',
-  TICKETS: 'safaispot_tickets_v1',
-  KARMACHARI: 'safaispot_karmachari_v1',
-  WARD_STATS: 'safaispot_ward_stats_v1',
-  SETTINGS: 'safaispot_settings_v1',
-  INITIALIZED: 'safaispot_initialized_v1',
+  HOUSEHOLD: 'safaiseva_household_profile',
+  HANDOVERS: 'safaiseva_handovers_v1',
+  TICKETS: 'safaiseva_tickets_v1',
+  KARMACHARI: 'safaiseva_karmachari_v1',
+  WARD_STATS: 'safaiseva_ward_stats_v1',
+  SETTINGS: 'safaiseva_settings_v1',
+  INITIALIZED: 'safaiseva_initialized_v1',
 };
 
 // Safe storage wrapper (supports IndexedDB with localStorage fallback)
