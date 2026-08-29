@@ -2,34 +2,6 @@
 <html lang="en" data-theme="light" class="light">
   <head>
     <meta charset="UTF-8" />
-    <script>
-      (function() {
-        try {
-          var origFetch = (typeof window !== 'undefined' && window.fetch) ? window.fetch.bind(window) : null;
-          var customFetch = origFetch;
-          if (typeof window !== 'undefined') {
-            try {
-              Object.defineProperty(window, 'fetch', {
-                get: function() { return customFetch || origFetch; },
-                set: function(val) { customFetch = val; },
-                configurable: true,
-                enumerable: true
-              });
-            } catch (err) {}
-          }
-          if (typeof globalThis !== 'undefined' && globalThis !== window) {
-            try {
-              Object.defineProperty(globalThis, 'fetch', {
-                get: function() { return customFetch || origFetch; },
-                set: function(val) { customFetch = val; },
-                configurable: true,
-                enumerable: true
-              });
-            } catch (err) {}
-          }
-        } catch (e) {}
-      })();
-    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>SafaiSeva — Ahmedabad Civic Waste Reward</title>
     <meta name="description" content="Civic reward app for Ahmedabad waste segregation verification and public transit rewards." />

@@ -77,7 +77,7 @@ export const RewardsView: React.FC<RewardsViewProps> = ({
       creditsSpent: opt.cost,
       redeemedAt: now.toISOString(),
       expiresAt: expires.toISOString(),
-      qrPayload: `SAFAISPOT-TRANSIT-${ticketId}-${now.toISOString().split('T')[0]}-VALID`,
+      qrPayload: `SAFAISEVA-TRANSIT-${ticketId}-${now.toISOString().split('T')[0]}-VALID`,
       status: 'active',
     };
 

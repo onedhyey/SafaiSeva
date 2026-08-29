@@ -11,12 +11,10 @@ import {
   Camera,
   Check,
   MapPin,
-  Upload,
   Sparkles,
   RefreshCw,
   FlipHorizontal,
   ShieldCheck,
-  Clock,
   XCircle,
   ArrowRight,
   AlertTriangle,
@@ -29,7 +27,6 @@ import {
 import { LeafGlyph } from '../LeafGlyph';
 import { LocationPickerModal } from '../LocationPickerModal';
 import { analyse, analyseVideo } from '../../lib/verification';
-import { addHandover } from '../../lib/db';
 
 interface DocumentViewProps {
   household: HouseholdProfile;
@@ -63,9 +60,11 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
 }) => {
   const [step, setStep] = useState<DocumentStep>('camera');
   const [photoUrl, setPhotoUrl] = useState<string>('');
+  // Default all streams off — the resident deliberately selects what is actually in frame
+  // (audit P3). Prevents manufactured claims and avoidable rejections.
   const [streams, setStreams] = useState<StreamChecklist>({
-    wet: true,
-    dry: true,
+    wet: false,
+    dry: false,
     sanitary: false,
     special_care: false,
   });
@@ -90,6 +89,8 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
   const [currentStageIndex, setCurrentStageIndex] = useState<number>(0);
   const [verificationResult, setVerificationResult] = useState<VerificationResult | null>(null);
   const [displayedBalance, setDisplayedBalance] = useState<number>(household.balance);
+  // Server handover id from the first (photo) attempt — reused by the video attempt.
+  const [handoverId, setHandoverId] = useState<string>('');
 
   // Video recording states for Stage 2
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -103,8 +104,6 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const playbackVideoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const videoFileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<any>(null);
@@ -119,7 +118,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
   const videoStages = [
     { id: '1', name: 'Multi-angle stream sweep', desc: 'Analyzing 360° pan across all containers' },
     { id: '2', name: 'Deep compartment inspection', desc: 'Validating container interiors & separation' },
-    { id: '3', name: 'Final Gemini 3.7 Flash evaluation', desc: 'Calculating dynamic Leaf Credits' },
+    { id: '3', name: 'Final AI evaluation', desc: 'Calculating dynamic Leaf Credits' },
   ];
 
   // Stop active video tracks
@@ -169,8 +168,8 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
         setIsCameraActive(false);
         setCameraError(
           err.name === 'NotAllowedError'
-            ? 'Camera permission denied. Please allow camera access or use the upload button.'
-            : 'Live camera unavailable. You can capture or upload using the file button below.'
+            ? 'Camera permission denied. Allow camera access for this site to submit a handover.'
+            : 'Live camera unavailable. A working camera is required — handovers cannot be uploaded from files.'
         );
       }
     },
@@ -265,46 +264,6 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
       stopCamera();
       setStep('streams');
     }
-  };
-
-  // Handle manual photo upload
-  const handlePhotoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const src = event.target?.result as string;
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const maxEdge = 800;
-        let w = img.width;
-        let h = img.height;
-        if (w > maxEdge || h > maxEdge) {
-          if (w > h) {
-            h = Math.round((h * maxEdge) / w);
-            w = maxEdge;
-          } else {
-            w = Math.round((w * maxEdge) / h);
-            h = maxEdge;
-          }
-        }
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, w, h);
-          setPhotoUrl(canvas.toDataURL('image/jpeg', 0.85));
-        } else {
-          setPhotoUrl(src);
-        }
-        stopCamera();
-        setStep('streams');
-      };
-      img.src = src;
-    };
-    reader.readAsDataURL(file);
   };
 
   // Toggle stream checklist
@@ -455,23 +414,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
     if (keyframeTimerRef.current) clearInterval(keyframeTimerRef.current);
   };
 
-  // Handle manual video file upload
-  const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const url = URL.createObjectURL(file);
-    setRecordedVideoBlob(file);
-    setRecordedVideoUrl(url);
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setRecordedVideoBase64(reader.result as string);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  // Stage 1: Verify Photo with Gemini 3.7 Flash
+  // Stage 1: Verify captured photo with the AI vision check
   const handleVerifyPhoto = async () => {
     if (!photoUrl) return;
 
@@ -485,51 +428,25 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
     const t2 = setTimeout(() => setCurrentStageIndex(2), 1500);
 
     try {
-      const result = await analyse({
-        photo: photoUrl,
-        streams,
-        location,
-        household,
-        priorHandovers: handovers,
-        override: aiOverride,
-        timestamp: now,
-      });
+      // The backend creates the handover, runs fraud + AI checks, adjudicates, and (on
+      // approval) writes the credit ledger. This client only renders the result.
+      const result = await analyse({ photo: photoUrl, streams, location, household, timestamp: now });
+      if (result.handoverId) setHandoverId(result.handoverId);
 
       setTimeout(async () => {
         setCurrentStageIndex(3);
         setVerificationResult(result);
 
-        // Check if Gemini returned low confidence
-        if (result.status === 'needs_video' || result.confidenceLevel === 'low') {
-          // Do not fail user! Prompt for short video verification.
+        // Low confidence on the first attempt -> ask for a short video. Not a failure.
+        if (result.status === 'needs_video') {
           setStep('low_confidence');
           return;
         }
 
-        // High confidence outcome: Verified or Rejected
         if (result.status === 'verified') {
-          const newHandover: HandoverRecord = {
-            id: `HND-NV-${dateStr.replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`,
-            householdId: household.id,
-            householdName: household.name,
-            ward: household.ward,
-            timestamp: now.toISOString(),
-            dateString: dateStr,
-            photoUrl,
-            imageHash: result.imageHash,
-            location,
-            streamsConfirmed: streams,
-            verification: result,
-            status: 'verified',
-            creditsAwarded: result.creditsAwarded,
-            source: 'app',
-          };
-
-          await addHandover(newHandover);
           if (onRefreshData) await onRefreshData();
           if (onSubmit) onSubmit({ photoUrl, streams, location });
 
-          // Animate balance
           const start = household.balance;
           const target = start + result.creditsAwarded;
           let cur = start;
@@ -541,6 +458,8 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
               clearInterval(countInterval);
             }
           }, 140);
+        } else if (onRefreshData) {
+          await onRefreshData();
         }
 
         setStep('result');
@@ -553,7 +472,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
     }
   };
 
-  // Stage 2: Verify Video with Gemini 3.7 Flash
+  // Stage 2: Verify captured video with the AI vision check
   const handleVerifyVideo = async () => {
     if (!recordedVideoBase64 && (!videoKeyframes || videoKeyframes.length === 0)) return;
 
@@ -573,7 +492,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
         streams,
         location,
         household,
-        override: aiOverride,
+        handoverId: handoverId || undefined,
         timestamp: now,
       });
 
@@ -582,28 +501,9 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
         setVerificationResult(result);
 
         if (result.status === 'verified') {
-          const newHandover: HandoverRecord = {
-            id: `HND-NV-${dateStr.replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`,
-            householdId: household.id,
-            householdName: household.name,
-            ward: household.ward,
-            timestamp: now.toISOString(),
-            dateString: dateStr,
-            photoUrl: videoKeyframes[0] || photoUrl,
-            imageHash: result.imageHash,
-            location,
-            streamsConfirmed: streams,
-            verification: result,
-            status: 'verified',
-            creditsAwarded: result.creditsAwarded,
-            source: 'app',
-          };
-
-          await addHandover(newHandover);
           if (onRefreshData) await onRefreshData();
           if (onSubmit) onSubmit({ photoUrl: videoKeyframes[0] || photoUrl, streams, location });
 
-          // Animate balance
           const start = household.balance;
           const target = start + result.creditsAwarded;
           let cur = start;
@@ -615,6 +515,8 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
               clearInterval(countInterval);
             }
           }, 140);
+        } else if (onRefreshData) {
+          await onRefreshData();
         }
 
         setStep('result');
@@ -639,25 +541,8 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
 
   return (
     <div className="space-y-4 pb-20 pt-1 text-left select-none">
-      {/* Hidden file input for photo upload */}
-      <input
-        type="file"
-        accept="image/*"
-        capture="environment"
-        ref={fileInputRef}
-        onChange={handlePhotoFileChange}
-        className="hidden"
-      />
-
-      {/* Hidden file input for video upload */}
-      <input
-        type="file"
-        accept="video/*"
-        capture="environment"
-        ref={videoFileInputRef}
-        onChange={handleVideoFileChange}
-        className="hidden"
-      />
+      {/* Evidence is captured live in-app only. There is deliberately no file/gallery
+          import path anywhere in this flow (audit C4). */}
 
       {/* ========================================================= */}
       {/* STEP 1: CAMERA-FIRST VIEWFINDER                           */}
@@ -698,7 +583,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                   <span>PHOTO CAMERA</span>
                 </div>
                 <div className="font-mono text-[10px] text-muted-l bg-black/60 px-2 py-0.5 rounded-sm border border-muted/30 backdrop-blur-xs">
-                  GEMINI 2.5 FLASH-LITE
+                  AI VISION CHECK
                 </div>
               </div>
 
@@ -747,26 +632,22 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                   <button
                     type="button"
                     onClick={() => startCamera(facingMode)}
-                    className="bg-ink-soft hover:bg-muted/20 border border-muted/40 text-white text-xs font-medium px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors"
+                    className="bg-green hover:bg-[#16934f] text-ink text-xs font-semibold px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <RefreshCw size={12} />
                     <span>Retry Camera</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="bg-green hover:bg-[#16934f] text-ink text-xs font-semibold px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <Camera size={12} />
-                    <span>Choose Photo</span>
-                  </button>
                 </div>
+                <p className="text-[10px] text-muted-l max-w-[260px] leading-relaxed">
+                  A live camera is required to submit a handover. Photos cannot be imported from your
+                  gallery. Check camera permissions for this site and try again.
+                </p>
               </div>
             )}
           </div>
 
-          {/* Shutter Bar */}
-          <div className="bg-ink-soft border border-muted/30 rounded-lg p-3 flex items-center justify-around">
+          {/* Shutter Bar — live capture only */}
+          <div className="bg-ink-soft border border-muted/30 rounded-lg p-3 flex items-center justify-center gap-10">
             <button
               type="button"
               onClick={toggleFacingMode}
@@ -779,20 +660,15 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
             <button
               type="button"
               onClick={captureLivePhoto}
+              disabled={!isCameraActive}
               aria-label="Capture waste photo"
-              className="w-16 h-16 rounded-full border-4 border-white/80 flex items-center justify-center bg-white/20 active:scale-90 transition-transform cursor-pointer shadow-lg hover:border-green group"
+              className="w-16 h-16 rounded-full border-4 border-white/80 flex items-center justify-center bg-white/20 active:scale-90 transition-transform cursor-pointer shadow-lg hover:border-green group disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <div className="w-11 h-11 rounded-full bg-white group-hover:bg-green transition-colors" />
             </button>
 
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              aria-label="Upload photo from device"
-              className="p-2.5 rounded-full bg-ink hover:bg-muted/20 border border-muted/30 text-tint transition-colors cursor-pointer"
-            >
-              <Upload size={18} />
-            </button>
+            {/* spacer keeps the shutter visually centred now that upload is removed */}
+            <span aria-hidden="true" className="w-[42px]" />
           </div>
         </div>
       )}
@@ -1007,7 +883,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
             }`}
           >
             <Sparkles size={16} />
-            <span>Verify with Gemini 3.7 Flash</span>
+            <span>Run AI vision check</span>
           </button>
         </div>
       )}
@@ -1020,7 +896,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
           <div className="flex items-center justify-between px-1">
             <div>
               <h1 className="text-sm font-semibold text-white">AI Vision Verification</h1>
-              <p className="text-xs text-muted-l">Gemini 3.7 Flash Multimodal Inspection</p>
+              <p className="text-xs text-muted-l">AI vision check — photo analysis</p>
             </div>
             <div className="font-mono text-[11px] text-green bg-green/10 px-2 py-0.5 rounded-sm border border-green/30 animate-pulse">
               ANALYSING
@@ -1037,7 +913,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
             <div className="absolute inset-0 pointer-events-none overflow-hidden">
               <div className="w-full h-1 bg-green shadow-[0_0_12px_#19A85B] animate-[scan_2s_ease-in-out_infinite]" />
               <div className="absolute top-2 left-2 font-mono text-[10px] bg-ink/85 text-green px-2 py-0.5 rounded-sm border border-green/30">
-                GEMINI 3.7 FLASH // STREAM MATRIX
+                AI VISION CHECK // STREAM MATRIX
               </div>
               <div className="absolute bottom-2 right-2 font-mono text-[10px] bg-ink/85 text-tint px-2 py-0.5 rounded-sm border border-muted/40">
                 CHECKING SEGREGATION...
@@ -1134,7 +1010,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
               <AlertTriangle size={20} className="text-amber shrink-0 mt-0.5" />
               <div>
                 <div className="text-xs font-bold text-amber uppercase tracking-wide">
-                  Gemini Uncertainty Notice
+                  Low-confidence notice
                 </div>
                 <p className="text-xs text-zinc-200 mt-1 leading-relaxed">
                   {verificationResult.decisionReason}
@@ -1287,9 +1163,9 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
             )}
           </div>
 
-          {/* Controls Bar */}
+          {/* Controls Bar — live capture only */}
           {!recordedVideoUrl ? (
-            <div className="bg-ink-soft border border-muted/30 rounded-lg p-3.5 flex items-center justify-around">
+            <div className="bg-ink-soft border border-muted/30 rounded-lg p-3.5 flex items-center justify-center gap-10">
               <button
                 type="button"
                 onClick={toggleFacingMode}
@@ -1320,14 +1196,8 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 </button>
               )}
 
-              <button
-                type="button"
-                onClick={() => videoFileInputRef.current?.click()}
-                disabled={isRecording}
-                className="p-2.5 rounded-full bg-ink hover:bg-muted/20 border border-muted/30 text-tint transition-colors cursor-pointer disabled:opacity-40"
-              >
-                <Upload size={18} />
-              </button>
+              {/* spacer keeps the record button visually centred now that upload is removed */}
+              <span aria-hidden="true" className="w-[42px]" />
             </div>
           ) : (
             // Recorded Video Action Bar
@@ -1338,7 +1208,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 className="w-full bg-green hover:bg-[#16934f] text-ink font-semibold text-sm py-3.5 px-4 rounded-md transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-md min-h-[48px]"
               >
                 <Sparkles size={18} />
-                <span>Submit Video for Gemini Verification</span>
+                <span>Submit video for AI verification</span>
               </button>
 
               <button
@@ -1367,7 +1237,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
           <div className="flex items-center justify-between px-1">
             <div>
               <h1 className="text-sm font-semibold text-white">Video Multi-Angle Verification</h1>
-              <p className="text-xs text-muted-l">Gemini 3.7 Flash Video Sweep Analysis</p>
+              <p className="text-xs text-muted-l">AI vision check — video analysis</p>
             </div>
             <div className="font-mono text-[11px] text-green bg-green/10 px-2 py-0.5 rounded-sm border border-green/30 animate-pulse">
               ANALYSING VIDEO
@@ -1395,7 +1265,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
             <div className="absolute inset-0 pointer-events-none overflow-hidden">
               <div className="w-full h-1 bg-green shadow-[0_0_12px_#19A85B] animate-[scan_1.5s_ease-in-out_infinite]" />
               <div className="absolute top-2 left-2 font-mono text-[10px] bg-ink/85 text-green px-2 py-0.5 rounded-sm border border-green/30">
-                GEMINI 3.7 FLASH // VIDEO MULTIMODAL
+                AI VISION CHECK // VIDEO
               </div>
               <div className="absolute bottom-2 right-2 font-mono text-[10px] bg-ink/85 text-tint px-2 py-0.5 rounded-sm border border-muted/40">
                 CALCULATING REWARDS...

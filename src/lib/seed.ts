@@ -37,7 +37,7 @@ export function createBinPhotoSvg(label: string, isClean = true, accent = '#19A8
       <text x="272" y="98" fill="#8FA697" font-family="sans-serif" font-size="9" text-anchor="middle">વિશેષ કચરો</text>
     </g>
     <!-- Stamp header -->
-    <text x="45" y="48" fill="#8FA697" font-family="monospace" font-size="11">SAFAISPOT VERIFIED CAPTURE // ${label}</text>
+    <text x="45" y="48" fill="#8FA697" font-family="monospace" font-size="11">SAFAISEVA VERIFIED CAPTURE // ${label}</text>
     <circle cx="355" cy="45" r="5" fill="${accent}" />
     <!-- Floor reflection marker -->
     <line x1="45" y1="210" x2="355" y2="210" stroke="#5B6B61" stroke-dasharray="4 4" stroke-width="1"/>
@@ -269,7 +269,7 @@ export function initialSeedData(): {
       creditsSpent: 20,
       redeemedAt: '2026-08-25T14:30:00Z',
       expiresAt: '2026-08-26T23:59:59Z',
-      qrPayload: 'SAFAISPOT-AMTS-BRTS-TKT-91823-VALID-20260826-ROUTE4D',
+      qrPayload: 'SAFAISEVA-AMTS-BRTS-TKT-91823-VALID-20260826-ROUTE4D',
       status: 'active',
     },
     {
@@ -280,7 +280,7 @@ export function initialSeedData(): {
       creditsSpent: 20,
       redeemedAt: '2026-08-21T09:15:00Z',
       expiresAt: '2026-08-21T23:59:59Z',
-      qrPayload: 'SAFAISPOT-GMRC-METRO-TKT-40192-USED',
+      qrPayload: 'SAFAISEVA-GMRC-METRO-TKT-40192-USED',
       status: 'used',
     },
     {
@@ -291,7 +291,7 @@ export function initialSeedData(): {
       creditsSpent: 20,
       redeemedAt: '2026-08-16T18:00:00Z',
       expiresAt: '2026-08-16T23:59:59Z',
-      qrPayload: 'SAFAISPOT-AMTS-BRTS-TKT-38291-USED',
+      qrPayload: 'SAFAISEVA-AMTS-BRTS-TKT-38291-USED',
       status: 'used',
     },
   ];
