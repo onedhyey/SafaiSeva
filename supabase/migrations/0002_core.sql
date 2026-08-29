@@ -74,7 +74,7 @@ create table if not exists public.households (
 
   -- Behaviour-change tracking (audit P1).
   bin_count             smallint not null default 1,   -- self-reported at onboarding
-  bin_target            smallint not null default 4,
+  bin_target            smallint not null default 6,
 
   created_at            timestamptz not null default now(),
   updated_at            timestamptz not null default now(),
