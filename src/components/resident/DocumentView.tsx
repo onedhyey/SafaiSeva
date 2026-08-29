@@ -27,6 +27,7 @@ import {
 import { LeafGlyph } from '../LeafGlyph';
 import { LocationPickerModal } from '../LocationPickerModal';
 import { analyse, analyseVideo } from '../../lib/verification';
+import { coordLabel, reverseGeocode } from '../../lib/geocode';
 
 interface DocumentViewProps {
   household: HouseholdProfile;
@@ -75,14 +76,15 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
 
   const [isCapturingLocation, setIsCapturingLocation] = useState<boolean>(true);
   const [isLocationPickerOpen, setIsLocationPickerOpen] = useState<boolean>(false);
+  // Starts from the household's registered address as a labelled fallback (isFallback:true);
+  // replaced by a precise device fix as soon as geolocation returns.
   const [location, setLocation] = useState<LocationData>({
     lat: 23.03842,
     lng: 72.55918,
-    address: `${household.address} (Navrangpura Ward 12, Ahmedabad)`,
-    isFallback: false,
+    address: household.address,
+    isFallback: true,
     ward: household.ward,
-    accuracyMeters: 4,
-    source: 'gps',
+    source: 'fallback',
   });
 
   // AI Verification Pipeline States
@@ -176,51 +178,53 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
     [facingMode, stopCamera]
   );
 
-  // Initialize GPS Location with High Precision
+  // Acquire a precise device location. The real coordinates are kept as-is (no clamping to
+  // a city centre); reverse geocoding fills a human address best-effort. On denial/failure
+  // the registered-address fallback stays and is clearly labelled.
   useEffect(() => {
     let mounted = true;
-    if (typeof navigator !== 'undefined' && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          if (!mounted) return;
-          const rawLat = pos.coords.latitude;
-          const rawLng = pos.coords.longitude;
-          const accuracy = Math.round(pos.coords.accuracy || 3);
-          
-          // Verify if inside Ahmedabad bounds or use default center
-          const isAhmedabad = rawLat >= 22.90 && rawLat <= 23.20 && rawLng >= 72.40 && rawLng <= 72.75;
-          const lat = isAhmedabad ? Number(rawLat.toFixed(5)) : 23.03842;
-          const lng = isAhmedabad ? Number(rawLng.toFixed(5)) : 72.55918;
-
-          setLocation({
-            lat,
-            lng,
-            address: `${household.address} (GPS Lock: ${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E)`,
-            isFallback: false,
-            ward: household.ward,
-            accuracyMeters: accuracy,
-            source: 'gps',
-          });
-          setIsCapturingLocation(false);
-        },
-        () => {
-          if (!mounted) return;
-          setLocation({
-            lat: 23.03842,
-            lng: 72.55918,
-            address: `${household.address} (AMC Navrangpura Ward 12 Matrix)`,
-            isFallback: false,
-            ward: household.ward,
-            accuracyMeters: 5,
-            source: 'gps',
-          });
-          setIsCapturingLocation(false);
-        },
-        { timeout: 7000, enableHighAccuracy: true, maximumAge: 0 }
-      );
-    } else {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
       setIsCapturingLocation(false);
+      return;
     }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        if (!mounted) return;
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const accuracyMeters = pos.coords.accuracy ? Math.round(pos.coords.accuracy) : undefined;
+
+        setLocation({
+          lat,
+          lng,
+          address: coordLabel(lat, lng),
+          isFallback: false,
+          ward: household.ward,
+          accuracyMeters,
+          source: 'gps',
+        });
+        setIsCapturingLocation(false);
+
+        reverseGeocode(lat, lng).then((addr) => {
+          if (mounted) setLocation((prev) => (prev.source === 'gps' ? { ...prev, address: addr } : prev));
+        });
+      },
+      (err) => {
+        if (!mounted) return;
+        setLocation((prev) => ({
+          ...prev,
+          isFallback: true,
+          source: 'fallback',
+          address:
+            err.code === err.PERMISSION_DENIED
+              ? `${household.address} — location not shared`
+              : `${household.address} — location unavailable`,
+        }));
+        setIsCapturingLocation(false);
+      },
+      { timeout: 12000, enableHighAccuracy: true, maximumAge: 0 }
+    );
 
     return () => {
       mounted = false;
@@ -610,7 +614,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                     setIsLocationPickerOpen(true);
                   }}
                   className="pointer-events-auto inline-flex items-center gap-1 bg-green/20 hover:bg-green/30 text-green border border-green/40 px-2 py-0.5 rounded-xs font-semibold cursor-pointer transition-colors"
-                  title="Edit location on Ahmedabad map"
+                  title="Edit handover location"
                 >
                   <Edit3 size={11} />
                   <span>Edit</span>
@@ -859,7 +863,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 type="button"
                 onClick={() => setIsLocationPickerOpen(true)}
                 className="px-2 py-1 rounded-sm bg-ink hover:bg-muted/20 border border-muted/40 text-green hover:text-white transition-colors cursor-pointer shrink-0 flex items-center gap-1 text-[11px] font-mono font-medium"
-                title="Edit location on Ahmedabad map"
+                title="Edit handover location"
               >
                 <Edit3 size={12} />
                 <span>Edit Map</span>
@@ -1389,9 +1393,13 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                       : 'Verification Failed'}
                   </span>
                   <span className="text-[10px] text-muted-l font-mono">
-                    {verificationResult.mediaType === 'video'
-                      ? 'Verified via Multi-Angle Video Sweep'
-                      : 'Verified via High-Confidence Photo'}
+                    {isApproved
+                      ? verificationResult.mediaType === 'video'
+                        ? 'Verified via multi-angle video sweep'
+                        : 'Verified via photo analysis'
+                      : verificationResult.mediaType === 'video'
+                      ? 'Video analysis'
+                      : 'Photo analysis'}
                   </span>
                 </div>
               </div>
@@ -1554,7 +1562,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
         </div>
       )}
 
-      {/* Ahmedabad Map Location Picker Modal */}
+      {/* Handover location picker */}
       <LocationPickerModal
         isOpen={isLocationPickerOpen}
         onClose={() => setIsLocationPickerOpen(false)}
