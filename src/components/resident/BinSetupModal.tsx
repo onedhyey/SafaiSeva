@@ -87,8 +87,8 @@ export const BinSetupModal: React.FC<BinSetupModalProps> = ({
         </div>
 
         <p className="text-xs text-zinc-300 leading-relaxed mb-3">
-          How many separate bins do you keep at home right now? Reaching two, then four,
-          earns you leaf credits before you even do a handover.
+          How many separate bins do you keep at home right now? Reaching 2, then 4, then 6
+          bins earns you leaf credits before you even do a handover.
         </p>
 
         <div className="space-y-2">
