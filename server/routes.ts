@@ -116,8 +116,9 @@ export function mountApiRoutes(app: Express) {
   // ---------------------------------------------------------------------------------
   // POST /api/household/bins — set how many separated bins the home has (audit P1).
   //   body: { binCount: 0..8 }
-  // Crossing 2 bins -> two_bins milestone credit; crossing 4 -> four_bins. Each is
-  // awarded once (bin_milestones unique per household+milestone), settled immediately.
+  // Crossing 2 / 4 / 6 bins awards the two_bins / four_bins / six_bins milestone credit
+  // (5 / 10 / 20). Each awarded once (bin_milestones unique per household+milestone),
+  // settled immediately.
   // ---------------------------------------------------------------------------------
   app.post('/api/household/bins', async (req: Request, res: Response) => {
     try {
@@ -135,11 +136,13 @@ export function mountApiRoutes(app: Express) {
       const db = admin();
       const { rules } = await activeRules();
 
-      const crossed: { milestone: 'two_bins' | 'four_bins'; credits: number }[] = [];
+      const crossed: { milestone: 'two_bins' | 'four_bins' | 'six_bins'; credits: number }[] = [];
       if (oldCount < 2 && newCount >= 2)
         crossed.push({ milestone: 'two_bins', credits: rules.milestones.two_bins });
       if (oldCount < 4 && newCount >= 4)
         crossed.push({ milestone: 'four_bins', credits: rules.milestones.four_bins });
+      if (oldCount < 6 && newCount >= 6)
+        crossed.push({ milestone: 'six_bins', credits: rules.milestones.six_bins });
 
       const awarded: { milestone: string; credits: number }[] = [];
       for (const c of crossed) {
@@ -155,7 +158,9 @@ export function mountApiRoutes(app: Express) {
           household_id: hh.id,
           entry_type: 'milestone',
           amount: c.credits,
-          reason: `${c.milestone === 'two_bins' ? 'Two-bin' : 'Four-bin'} setup milestone`,
+          reason: `${
+            c.milestone === 'two_bins' ? 'Two-bin' : c.milestone === 'four_bins' ? 'Four-bin' : 'Six-bin'
+          } setup milestone`,
           effective_at: new Date().toISOString(),
           created_by: principal.userId,
         });
@@ -212,12 +217,20 @@ export function mountApiRoutes(app: Express) {
       if (attempt === 1 && !photo) return fail(res, 400, 'A camera photo is required.');
       if (attempt === 2 && !photo && !video && videoFrames.length === 0)
         return fail(res, 400, 'A camera video or photo is required for the second attempt.');
-      if (declaredStreams.length === 0) {
-        const r = renderReason('NO_STREAMS_DECLARED');
-        return res.json({ status: 'rejected', reasonCode: r.code, reasonText: r.text, creditsAwarded: 0, confirmedStreams: [] });
+      const { version: rulesVersion, rules } = await activeRules();
+
+      if (declaredStreams.length < (rules.min_declared_streams ?? 2)) {
+        const r = renderReason('TOO_FEW_STREAMS');
+        return res.json({
+          status: 'rejected',
+          reasonCode: r.code,
+          reasonText: r.text,
+          fix: r.fix,
+          creditsAwarded: 0,
+          confirmedStreams: [],
+        });
       }
 
-      const { version: rulesVersion, rules } = await activeRules();
       const collectionDate = istDate(capturedAt);
 
       // --- idempotency: reuse an existing pending row for this attempt key ---

@@ -30,16 +30,20 @@ const run = (name, input, check) => {
 };
 
 let all = true;
-all &= run('wet+dry verified, 3 credits (2 streams + wet_dry combo)',
+all &= run('wet+dry verified -> 2 credits (1 per confirmed stream, no bonus)',
   { evidence: ev(), declaredStreams: ['wet', 'dry'], attempt: 1, fraudSignals: [] },
-  d => d.status === 'verified' && d.creditsAwarded === 3 && d.confirmedStreams.length === 2);
+  d => d.status === 'verified' && d.creditsAwarded === 2 && d.confirmedStreams.length === 2);
 
-all &= run('all four verified -> 4 + combo + full4 = 6, capped at daily_cap 5',
+all &= run('all four verified -> 4 credits (max, no bonus)',
   { evidence: ev({ streams: {
       wet:{visible:true,contamination:'none',note:''}, dry:{visible:true,contamination:'none',note:''},
       sanitary:{visible:true,contamination:'none',note:''}, special_care:{visible:true,contamination:'none',note:''} } }),
     declaredStreams: ['wet','dry','sanitary','special_care'], attempt: 1, fraudSignals: [] },
-  d => d.status === 'verified' && d.creditsAwarded === 5);
+  d => d.status === 'verified' && d.creditsAwarded === 4);
+
+all &= run('only 1 stream declared -> rejected TOO_FEW_STREAMS',
+  { evidence: ev(), declaredStreams: ['wet'], attempt: 1, fraudSignals: [] },
+  d => d.status === 'rejected' && d.reasonCode === 'TOO_FEW_STREAMS' && d.creditsAwarded === 0);
 
 all &= run('declared dry but not visible -> credit only wet, note the miss',
   { evidence: ev({ streams: { ...ev().streams, dry: { visible: false, contamination: 'unknown', note: 'not seen' } } }),
@@ -72,7 +76,7 @@ all &= run('velocity -> in_review',
   d => d.status === 'in_review' && d.reasonCode === 'VELOCITY_ANOMALY');
 
 all &= run('gujarati reason text renders',
-  { evidence: ev({ wastePresent: false, scene: 'no_waste' }), declaredStreams: ['wet'], attempt: 1, fraudSignals: [], lang: 'gu' },
+  { evidence: ev({ wastePresent: false, scene: 'no_waste' }), declaredStreams: ['wet', 'dry'], attempt: 1, fraudSignals: [], lang: 'gu' },
   d => d.status === 'rejected' && /કચરો/.test(d.reasonText));
 
 // --- combined reasons: content problem AND a logistics block ---
@@ -91,7 +95,7 @@ all &= run('valid waste + outside window -> window IS the headline (nothing wron
   d => d.status === 'rejected' && d.reasonCode === 'OUTSIDE_WINDOW' && d.otherReasons.length === 0);
 
 all &= run('no waste + outside window + duplicate -> NO_WASTE headline, 2 others',
-  { evidence: ev({ wastePresent: false, scene: 'no_waste' }), declaredStreams: ['wet'],
+  { evidence: ev({ wastePresent: false, scene: 'no_waste' }), declaredStreams: ['wet', 'dry'],
     attempt: 1, fraudSignals: ['window_outside', 'duplicate_phash'], collectionWindow: { start: 6, end: 12 } },
   d => d.status === 'rejected' && d.reasonCode === 'NO_WASTE' && d.otherReasons.length === 2);
 

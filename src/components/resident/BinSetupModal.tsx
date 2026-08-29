@@ -12,11 +12,13 @@ interface BinSetupModalProps {
   onSaved: (result: SetBinsResponse) => void;
 }
 
-const STREAM_HINT = [
-  { n: 2, label: 'Wet + Dry', note: 'the two that matter most' },
-  { n: 3, label: '+ Sanitary', note: 'wrapped separately' },
-  { n: 4, label: '+ Special care', note: 'batteries, e-waste, sharps' },
-];
+const STREAM_HINT: Record<number, string> = {
+  2: 'Wet + Dry',
+  3: '+ Sanitary',
+  4: '+ Special care',
+  5: '+ one more sorted',
+  6: 'Fully sorted',
+};
 
 export const BinSetupModal: React.FC<BinSetupModalProps> = ({
   isOpen,
@@ -36,12 +38,15 @@ export const BinSetupModal: React.FC<BinSetupModalProps> = ({
     { value: 2, title: 'Two bins', sub: 'Wet and dry kept apart' },
     { value: 3, title: 'Three bins', sub: 'Wet, dry, sanitary' },
     { value: 4, title: 'Four bins', sub: 'All four streams separated' },
+    { value: 5, title: 'Five bins', sub: 'Four streams plus one more sorted' },
+    { value: 6, title: 'Six bins', sub: 'Fully sorted at source' },
   ];
 
   // What the resident would earn by moving from their recorded count to `choice`.
   const preview: string[] = [];
   if (bins.count < 2 && choice >= 2) preview.push(`+${bins.milestoneCredits.two_bins} for reaching 2 bins`);
   if (bins.count < 4 && choice >= 4) preview.push(`+${bins.milestoneCredits.four_bins} for reaching 4 bins`);
+  if (bins.count < 6 && choice >= 6) preview.push(`+${bins.milestoneCredits.six_bins} for reaching 6 bins`);
 
   const save = async () => {
     setSaving(true);
@@ -103,9 +108,9 @@ export const BinSetupModal: React.FC<BinSetupModalProps> = ({
                 <div>
                   <div className="text-xs font-bold flex items-center gap-2">
                     <span>{o.title}</span>
-                    {o.value >= 2 && o.value <= 4 && (
+                    {STREAM_HINT[o.value] && (
                       <span className="text-[10px] font-normal text-zinc-400">
-                        {STREAM_HINT.find((h) => h.n === o.value)?.label}
+                        {STREAM_HINT[o.value]}
                       </span>
                     )}
                   </div>

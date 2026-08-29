@@ -102,11 +102,19 @@ export const WalletView: React.FC<WalletViewProps> = ({
                   {bins.count} of {bins.target} bins at home
                 </div>
                 <div className="text-[11px] text-muted-l">
-                  {bins.count >= bins.target
-                    ? 'Full four-stream setup — nicely done'
-                    : bins.count >= 2
-                    ? `Add ${bins.target - bins.count} more to reach the four-bin bonus (+${bins.milestoneCredits.four_bins})`
-                    : `Reach 2 bins for +${bins.milestoneCredits.two_bins} leaves`}
+                  {(() => {
+                    const next =
+                      bins.count < 2
+                        ? { at: 2, credits: bins.milestoneCredits.two_bins }
+                        : bins.count < 4
+                        ? { at: 4, credits: bins.milestoneCredits.four_bins }
+                        : bins.count < 6
+                        ? { at: 6, credits: bins.milestoneCredits.six_bins }
+                        : null;
+                    return next
+                      ? `Reach ${next.at} bins for +${next.credits} leaves`
+                      : 'Fully sorted at source — nicely done';
+                  })()}
                 </div>
               </div>
             </div>
@@ -131,7 +139,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
           <span>Document today&apos;s handover</span>
         </button>
         <p className="text-[11px] text-center text-muted-l mt-1.5">
-          Variable Leaf Credits per AI verified segregated collection
+          1 leaf credit per verified stream · 2–4 per handover
         </p>
       </div>
 

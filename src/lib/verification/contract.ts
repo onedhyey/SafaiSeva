@@ -66,12 +66,15 @@ export interface Decision {
 
 // ---- Reward rules shape (the `rules` jsonb in public.reward_rules) --------------------
 export interface RewardRules {
+  /** +1 per waste stream the AI confirms. */
   per_confirmed_stream: number;
-  combo_bonus: { wet_dry?: number };
-  full_four_bonus: number;
+  /** Hard ceiling on a single handover. A handover needs >= min_declared_streams, so the
+   *  practical range is [min_declared_streams, daily_cap_credits] = [2, 4]. */
   daily_cap_credits: number;
+  /** Fewest streams a resident must declare to submit (wet + dry at minimum). */
+  min_declared_streams: number;
   settlement_hold_hours: number;
-  milestones: { two_bins: number; four_bins: number };
+  milestones: { two_bins: number; four_bins: number; six_bins: number };
   worker_issue_credits: number;
   recapture_block_at: number;
   review_confidence_band: { low: number; high: number };
@@ -80,11 +83,10 @@ export interface RewardRules {
 
 export const FALLBACK_RULES: RewardRules = {
   per_confirmed_stream: 1,
-  combo_bonus: { wet_dry: 1 },
-  full_four_bonus: 1,
-  daily_cap_credits: 5,
+  daily_cap_credits: 4,
+  min_declared_streams: 2,
   settlement_hold_hours: 24,
-  milestones: { two_bins: 10, four_bins: 20 },
+  milestones: { two_bins: 5, four_bins: 10, six_bins: 20 },
   worker_issue_credits: 2,
   recapture_block_at: 0.75,
   review_confidence_band: { low: 0.45, high: 0.75 },

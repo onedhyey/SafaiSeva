@@ -8,7 +8,7 @@ export interface BinsInfo {
   count: number;
   target: number;
   onboarded: boolean;
-  milestoneCredits: { two_bins: number; four_bins: number };
+  milestoneCredits: { two_bins: number; four_bins: number; six_bins: number };
 }
 
 export interface WalletResponse {

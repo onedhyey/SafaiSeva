@@ -148,17 +148,18 @@ function errorResult(message: string, mediaType: 'photo' | 'video'): Verificatio
 
 export async function analyse(options: VerificationOptions): Promise<VerificationResult> {
   const declaredStreams = checklistToArray(options.streams);
-  if (declaredStreams.length === 0) {
+  if (declaredStreams.length < 2) {
     return {
       status: 'rejected',
-      decisionReason: 'Select at least one waste stream that is visible in your photo.',
+      decisionReason:
+        'Select at least two streams — you must separate wet and dry waste to log a handover.',
       creditsAwarded: 0,
       confidence: 0.99,
       confidenceLevel: 'high',
       mediaType: 'photo',
       stages: [],
       streams: emptyStreams(),
-      flags: ['no_streams_selected'],
+      flags: ['too_few_streams'],
       imageHash: '',
     };
   }
