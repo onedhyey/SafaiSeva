@@ -49,6 +49,8 @@ export interface VerificationResult {
   imageHash: string;
   /** Server-generated handover id (present once the backend has created the row). */
   handoverId?: string;
+  /** Secondary problems beyond the headline reason, each a full sentence. */
+  secondaryReasons?: string[];
 }
 
 export interface LocationData {

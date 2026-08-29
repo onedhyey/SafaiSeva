@@ -75,5 +75,25 @@ all &= run('gujarati reason text renders',
   { evidence: ev({ wastePresent: false, scene: 'no_waste' }), declaredStreams: ['wet'], attempt: 1, fraudSignals: [], lang: 'gu' },
   d => d.status === 'rejected' && /કચરો/.test(d.reasonText));
 
+// --- combined reasons: content problem AND a logistics block ---
+all &= run('no waste + outside window -> headline NO_WASTE, window listed as "also"',
+  { evidence: ev({ wastePresent: false, scene: 'no_waste' }), declaredStreams: ['wet', 'dry'],
+    attempt: 1, fraudSignals: ['window_outside'], collectionWindow: { start: 6, end: 12 } },
+  d =>
+    d.status === 'rejected' &&
+    d.reasonCode === 'NO_WASTE' &&
+    d.otherReasons.length === 1 &&
+    /collection hours \(6:00 AM – 12:00 PM\)/.test(d.otherReasons[0]));
+
+all &= run('valid waste + outside window -> window IS the headline (nothing wrong with the photo)',
+  { evidence: ev(), declaredStreams: ['wet', 'dry'], attempt: 1,
+    fraudSignals: ['window_outside'], collectionWindow: { start: 6, end: 12 } },
+  d => d.status === 'rejected' && d.reasonCode === 'OUTSIDE_WINDOW' && d.otherReasons.length === 0);
+
+all &= run('no waste + outside window + duplicate -> NO_WASTE headline, 2 others',
+  { evidence: ev({ wastePresent: false, scene: 'no_waste' }), declaredStreams: ['wet'],
+    attempt: 1, fraudSignals: ['window_outside', 'duplicate_phash'], collectionWindow: { start: 6, end: 12 } },
+  d => d.status === 'rejected' && d.reasonCode === 'NO_WASTE' && d.otherReasons.length === 2);
+
 console.log(all ? '\nALL PASS' : '\nSOME FAILED');
 process.exit(all ? 0 : 1);

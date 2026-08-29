@@ -1417,6 +1417,17 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
               {verificationResult.decisionReason}
             </p>
 
+            {verificationResult.secondaryReasons && verificationResult.secondaryReasons.length > 0 && (
+              <ul className="pt-1 space-y-1">
+                {verificationResult.secondaryReasons.map((reason, i) => (
+                  <li key={i} className="text-[11px] text-muted-l leading-relaxed flex gap-1.5">
+                    <span className="text-red/70 shrink-0">•</span>
+                    <span>{reason}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
             {/* Updated Balance Display */}
             {isApproved && (
               <div className="pt-2 border-t border-green/20 flex items-center justify-between text-xs text-tint">

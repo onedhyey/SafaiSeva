@@ -1,17 +1,15 @@
 // The adjudicator — the single authoritative decision function (audit C2/C3).
 //
 // Pure: no I/O, no clock, no randomness. Given the model's evidence, the resident's
-// declared streams, the active reward rules, and server-computed fraud signals, it
-// returns the Decision. The Express API calls this; nothing on the client does.
+// declared streams, the active reward rules, the household's collection window, and
+// server-computed fraud signals, it returns the Decision. The Express API calls this;
+// nothing on the client does.
+//
+// It evaluates EVERY applicable problem, not just the first, then reports the most
+// actionable one as the headline with the rest as "also" (audit: reason accuracy).
 
-import {
-  Decision,
-  DecisionStatus,
-  RewardRules,
-  WasteEvidence,
-  WasteStream,
-} from './contract.ts';
-import { ReasonCode, renderReason, Lang } from './reasonCodes.ts';
+import { Decision, DecisionStatus, RewardRules, WasteEvidence, WasteStream } from './contract.ts';
+import { ReasonCode, renderReason, formatWindow, Lang } from './reasonCodes.ts';
 
 export interface AdjudicateInput {
   evidence: WasteEvidence;
@@ -20,140 +18,238 @@ export interface AdjudicateInput {
   rewardRulesVersion: number;
   attempt: 1 | 2;
   mediaKind: 'photo' | 'video';
-  /** Server-computed, authoritative. e.g. 'daily_limit', 'geo_outside', 'window_outside',
-   *  'duplicate_phash', 'velocity', 'burst'. */
+  /** Server-computed, authoritative: 'daily_limit' | 'geo_outside' | 'window_outside'
+   *  | 'duplicate_phash' | 'velocity' | 'burst'. */
   fraudSignals: string[];
+  /** Household's local collection hours, so the window can be named in the message. */
+  collectionWindow?: { start: number; end: number };
   lang?: Lang;
 }
 
-function decision(
-  status: DecisionStatus,
-  code: ReasonCode,
-  opts: {
-    confirmed?: WasteStream[];
-    credits?: number;
-    streams?: string[];
-    fraudSignals?: string[];
-    rewardRulesVersion?: number;
-    lang?: Lang;
-  } = {}
-): Decision {
-  const r = renderReason(code, { lang: opts.lang, streams: opts.streams });
-  return {
-    status,
-    confirmedStreams: opts.confirmed ?? [],
-    creditsAwarded: opts.credits ?? 0,
-    reasonCode: code,
-    reasonText: r.text,
-    fix: r.fix,
-    fraudSignals: opts.fraudSignals ?? [],
-    rewardRulesVersion: opts.rewardRulesVersion,
-  };
+interface Finding {
+  code: ReasonCode;
+  streams?: string[];
 }
+
+// Headline order: most actionable to the resident first. A photo that isn't valid waste
+// is the thing to fix; logistics blocks (time/place/limit) come after.
+const HEADLINE_ORDER: ReasonCode[] = [
+  'NO_WASTE',
+  'UNRELATED_IMAGE',
+  'SCREEN_RECAPTURE',
+  'EMPTY_OR_UNCLEAR',
+  'CROSS_CONTAMINATION',
+  'STREAM_NOT_VISIBLE',
+  'TAMPER_SUSPECTED',
+  'DUPLICATE_EVIDENCE',
+  'OUTSIDE_GEOFENCE',
+  'OUTSIDE_WINDOW',
+  'DAILY_LIMIT_REACHED',
+  'VELOCITY_ANOMALY',
+  'NEEDS_VIDEO_LOW_CONFIDENCE',
+  'IN_REVIEW_CONFLICT',
+];
+const rank = (c: ReasonCode) => {
+  const i = HEADLINE_ORDER.indexOf(c);
+  return i === -1 ? 99 : i;
+};
+
+const HARD_BLOCKS: ReasonCode[] = [
+  'DAILY_LIMIT_REACHED',
+  'OUTSIDE_GEOFENCE',
+  'OUTSIDE_WINDOW',
+  'DUPLICATE_EVIDENCE',
+];
 
 function computeCredits(confirmed: WasteStream[], rules: RewardRules): number {
   if (confirmed.length === 0) return 0;
   let c = confirmed.length * rules.per_confirmed_stream;
-  if (confirmed.includes('wet') && confirmed.includes('dry')) {
-    c += rules.combo_bonus.wet_dry ?? 0;
-  }
+  if (confirmed.includes('wet') && confirmed.includes('dry')) c += rules.combo_bonus.wet_dry ?? 0;
   if (confirmed.length === 4) c += rules.full_four_bonus;
-  c = Math.min(c, rules.daily_cap_credits);
-  return Math.max(1, c);
+  return Math.max(1, Math.min(c, rules.daily_cap_credits));
 }
 
 export function adjudicate(input: AdjudicateInput): Decision {
   const { evidence, declaredStreams, rules, attempt, mediaKind, fraudSignals, lang } = input;
-  const v = input.rewardRulesVersion;
-  const d = (status: DecisionStatus, code: ReasonCode, opts: Parameters<typeof decision>[2] = {}) =>
-    decision(status, code, {
-      ...opts,
-      lang,
-      rewardRulesVersion: v,
-      // a call site may append signals (e.g. 'recapture_suspected'); otherwise pass through
-      fraudSignals: opts.fraudSignals ?? fraudSignals,
-    });
+  const version = input.rewardRulesVersion;
+  const windowLabel = input.collectionWindow
+    ? formatWindow(input.collectionWindow.start, input.collectionWindow.end)
+    : undefined;
 
-  // 1. Authoritative structural blocks (server-computed) come first.
-  if (fraudSignals.includes('daily_limit')) return d('rejected', 'DAILY_LIMIT_REACHED');
-  if (fraudSignals.includes('geo_outside')) return d('rejected', 'OUTSIDE_GEOFENCE');
-  if (fraudSignals.includes('window_outside')) return d('rejected', 'OUTSIDE_WINDOW');
-  if (fraudSignals.includes('duplicate_phash')) return d('rejected', 'DUPLICATE_EVIDENCE');
-  if (fraudSignals.includes('velocity') || fraudSignals.includes('burst')) {
-    return d('in_review', 'VELOCITY_ANOMALY');
+  const render = (code: ReasonCode, streams?: string[]) =>
+    renderReason(code, { lang, streams, window: windowLabel });
+
+  // --- nothing declared: terminal, nothing else is worth saying ---
+  if (declaredStreams.length === 0) {
+    const r = render('NO_STREAMS_DECLARED');
+    return {
+      status: 'rejected',
+      confirmedStreams: [],
+      creditsAwarded: 0,
+      reasonCode: 'NO_STREAMS_DECLARED',
+      reasonText: r.text,
+      fix: r.fix,
+      otherReasons: [],
+      fraudSignals,
+      rewardRulesVersion: version,
+    };
   }
 
-  // 2. Nothing declared.
-  if (declaredStreams.length === 0) return d('rejected', 'NO_STREAMS_DECLARED');
+  const findings: Finding[] = [];
+  const extraSignals = new Set<string>();
 
-  // 3. Re-photography of a screen / print (audit A1).
-  if (
-    evidence.recaptureLikelihood >= rules.recapture_block_at ||
-    evidence.scene === 'screen_or_photo'
-  ) {
-    return d('rejected', 'SCREEN_RECAPTURE', { fraudSignals: [...fraudSignals, 'recapture_suspected'] });
-  }
-  if (evidence.recaptureLikelihood >= rules.review_confidence_band.low) {
-    return d('in_review', 'SCREEN_RECAPTURE', {
-      fraudSignals: [...fraudSignals, 'recapture_suspected'],
-    });
+  // --- structural blocks (server-computed) ---
+  if (fraudSignals.includes('daily_limit')) findings.push({ code: 'DAILY_LIMIT_REACHED' });
+  if (fraudSignals.includes('geo_outside')) findings.push({ code: 'OUTSIDE_GEOFENCE' });
+  if (fraudSignals.includes('window_outside')) findings.push({ code: 'OUTSIDE_WINDOW' });
+  if (fraudSignals.includes('duplicate_phash')) findings.push({ code: 'DUPLICATE_EVIDENCE' });
+  const softAnomaly = fraudSignals.includes('velocity') || fraudSignals.includes('burst');
+  const hasHardBlock = findings.some((f) => HARD_BLOCKS.includes(f.code));
+
+  // --- content evaluation (independent of the blocks above) ---
+  // contentOutcome: 'ok' | 'rejected' | 'needs_video' | 'in_review'
+  let contentOutcome: 'ok' | 'rejected' | 'needs_video' | 'in_review' = 'ok';
+  let confirmed: WasteStream[] = [];
+  let notVisible: WasteStream[] = [];
+
+  const recap = evidence.recaptureLikelihood;
+  if (recap >= rules.recapture_block_at || evidence.scene === 'screen_or_photo') {
+    findings.push({ code: 'SCREEN_RECAPTURE' });
+    extraSignals.add('recapture_suspected');
+    contentOutcome = 'rejected';
+  } else if (recap >= rules.review_confidence_band.low) {
+    findings.push({ code: 'SCREEN_RECAPTURE' });
+    extraSignals.add('recapture_suspected');
+    contentOutcome = 'in_review';
+  } else if (evidence.tamperSignals.length > 0) {
+    findings.push({ code: 'TAMPER_SUSPECTED' });
+    extraSignals.add('tamper_suspected');
+    contentOutcome = 'in_review';
+  } else if (!evidence.wastePresent || evidence.scene === 'no_waste') {
+    findings.push({ code: 'NO_WASTE' });
+    contentOutcome = 'rejected';
+  } else if (evidence.scene === 'unrelated') {
+    findings.push({ code: 'UNRELATED_IMAGE' });
+    contentOutcome = 'rejected';
+  } else if (evidence.imageQuality === 'unusable' || evidence.scene === 'unclear') {
+    if (attempt === 1) {
+      findings.push({ code: 'NEEDS_VIDEO_LOW_CONFIDENCE' });
+      contentOutcome = 'needs_video';
+    } else {
+      findings.push({ code: 'EMPTY_OR_UNCLEAR' });
+      contentOutcome = 'rejected';
+    }
+  } else if (evidence.overallConfidence < rules.review_confidence_band.high) {
+    if (attempt === 1) {
+      findings.push({ code: 'NEEDS_VIDEO_LOW_CONFIDENCE' });
+      contentOutcome = 'needs_video';
+    } else {
+      findings.push({ code: 'IN_REVIEW_CONFLICT' });
+      contentOutcome = 'in_review';
+    }
+  } else {
+    // scene + confidence fine → stream confirmation
+    const contaminated = declaredStreams.filter(
+      (s) => evidence.streams[s].visible && evidence.streams[s].contamination === 'major'
+    );
+    confirmed = declaredStreams.filter(
+      (s) =>
+        evidence.streams[s].visible &&
+        (evidence.streams[s].contamination === 'none' ||
+          evidence.streams[s].contamination === 'minor')
+    );
+    notVisible = declaredStreams.filter((s) => !evidence.streams[s].visible);
+
+    if (contaminated.length > 0) {
+      findings.push({ code: 'CROSS_CONTAMINATION', streams: contaminated });
+      contentOutcome = 'rejected';
+    } else if (confirmed.length === 0) {
+      if (attempt === 1) {
+        findings.push({ code: 'NEEDS_VIDEO_LOW_CONFIDENCE' });
+        contentOutcome = 'needs_video';
+      } else {
+        findings.push({ code: 'STREAM_NOT_VISIBLE', streams: notVisible });
+        contentOutcome = 'rejected';
+      }
+    } else {
+      contentOutcome = 'ok'; // verified (possibly partial)
+    }
   }
 
-  // 4. Editing / tampering signals — weak detector, so route to a human, don't hard-fail.
-  if (evidence.tamperSignals.length > 0) {
-    return d('in_review', 'TAMPER_SUSPECTED', { fraudSignals: [...fraudSignals, 'tamper_suspected'] });
+  // --- clean pass: verified ---
+  if (contentOutcome === 'ok' && !hasHardBlock && !softAnomaly) {
+    const credits = computeCredits(confirmed, rules);
+    const okCode: ReasonCode = mediaKind === 'video' ? 'OK_VERIFIED_VIDEO' : 'OK_VERIFIED';
+    const r = render(okCode, confirmed);
+    let reasonText = r.text;
+    let fix = r.fix;
+    if (notVisible.length > 0) {
+      const miss = render('STREAM_NOT_VISIBLE', notVisible);
+      reasonText = `${reasonText} ${miss.text}`;
+      fix = miss.fix;
+    }
+    return {
+      status: 'verified',
+      confirmedStreams: confirmed,
+      creditsAwarded: credits,
+      reasonCode: okCode,
+      reasonText,
+      fix,
+      otherReasons: [],
+      fraudSignals: [...fraudSignals, ...extraSignals],
+      rewardRulesVersion: version,
+    };
   }
 
-  // 5. Scene reality check.
-  if (!evidence.wastePresent || evidence.scene === 'no_waste') {
-    return d('rejected', 'NO_WASTE');
-  }
-  if (evidence.scene === 'unrelated') return d('rejected', 'UNRELATED_IMAGE');
-  if (evidence.imageQuality === 'unusable' || evidence.scene === 'unclear') {
-    return attempt === 1
-      ? d('needs_video', 'NEEDS_VIDEO_LOW_CONFIDENCE')
-      : d('rejected', 'EMPTY_OR_UNCLEAR');
+  // --- failure path: decide status ---
+  let status: DecisionStatus;
+  if (hasHardBlock || contentOutcome === 'rejected') status = 'rejected';
+  else if (softAnomaly || contentOutcome === 'in_review') status = 'in_review';
+  else status = 'needs_video'; // only reached when the sole issue is low-confidence attempt 1
+
+  // A pure low-confidence first attempt: keep it as a single clean "record a video" prompt.
+  if (status === 'needs_video') {
+    const r = render('NEEDS_VIDEO_LOW_CONFIDENCE');
+    return {
+      status,
+      confirmedStreams: [],
+      creditsAwarded: 0,
+      reasonCode: 'NEEDS_VIDEO_LOW_CONFIDENCE',
+      reasonText: r.text,
+      fix: r.fix,
+      otherReasons: [],
+      fraudSignals: [...fraudSignals, ...extraSignals],
+      rewardRulesVersion: version,
+    };
   }
 
-  // 6. Model self-confidence routing.
-  if (evidence.overallConfidence < rules.review_confidence_band.high) {
-    return attempt === 1
-      ? d('needs_video', 'NEEDS_VIDEO_LOW_CONFIDENCE')
-      : d('in_review', 'IN_REVIEW_CONFLICT');
-  }
-
-  // 7. Stream confirmation: declared ∩ actually-visible-and-clean.
-  const contaminated = declaredStreams.filter(
-    (s) => evidence.streams[s].visible && evidence.streams[s].contamination === 'major'
+  // If a hard block makes this a rejection, a "record a video" content finding is moot.
+  let usable = findings.filter(
+    (f) => !(hasHardBlock && f.code === 'NEEDS_VIDEO_LOW_CONFIDENCE')
   );
-  if (contaminated.length > 0) {
-    return d('rejected', 'CROSS_CONTAMINATION', { streams: contaminated });
+  if (softAnomaly && !usable.some((f) => f.code === 'VELOCITY_ANOMALY')) {
+    usable.push({ code: 'VELOCITY_ANOMALY' });
   }
+  // de-dupe by code (recapture can be pushed once)
+  const seen = new Set<string>();
+  usable = usable.filter((f) => (seen.has(f.code) ? false : (seen.add(f.code), true)));
+  usable.sort((a, b) => rank(a.code) - rank(b.code));
 
-  const confirmed = declaredStreams.filter(
-    (s) =>
-      evidence.streams[s].visible &&
-      (evidence.streams[s].contamination === 'none' ||
-        evidence.streams[s].contamination === 'minor')
-  );
-  const notVisible = declaredStreams.filter((s) => !evidence.streams[s].visible);
+  const [head, ...rest] = usable;
+  const headR = render(head.code, head.streams);
+  // `reasonText` is the headline only; `otherReasons` lists every additional problem so
+  // the resident sees the full picture (e.g. "no waste" AND "outside collection hours").
+  const otherReasons = rest.map((f) => render(f.code, f.streams).text);
 
-  if (confirmed.length === 0) {
-    return attempt === 1
-      ? d('needs_video', 'NEEDS_VIDEO_LOW_CONFIDENCE')
-      : d('rejected', 'STREAM_NOT_VISIBLE', { streams: notVisible });
-  }
-
-  // 8. Verified (fully or partially). Credits only for confirmed streams.
-  const credits = computeCredits(confirmed, rules);
-  const code: ReasonCode = mediaKind === 'video' ? 'OK_VERIFIED_VIDEO' : 'OK_VERIFIED';
-  const base = d('verified', code, { confirmed, credits, streams: confirmed });
-
-  if (notVisible.length > 0) {
-    // Partial: approve what was confirmed, but tell the resident what wasn't.
-    const missing = renderReason('STREAM_NOT_VISIBLE', { lang, streams: notVisible });
-    base.reasonText = `${base.reasonText} ${missing.text}`;
-    base.fix = missing.fix;
-  }
-  return base;
+  return {
+    status,
+    confirmedStreams: [],
+    creditsAwarded: 0,
+    reasonCode: head.code,
+    reasonText: headR.text,
+    fix: headR.fix,
+    otherReasons,
+    fraudSignals: [...fraudSignals, ...extraSignals],
+    rewardRulesVersion: version,
+  };
 }

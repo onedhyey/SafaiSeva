@@ -26,15 +26,29 @@ async function activeRules(): Promise<{ version: number; rules: RewardRules }> {
   return { version: data?.version ?? 0, rules: (data?.rules as RewardRules) ?? FALLBACK_RULES };
 }
 
-async function householdForUser(userId: string): Promise<{ id: string; code: string } | null> {
+interface HouseholdCtx {
+  id: string;
+  code: string;
+  collectionWindow: { start: number; end: number };
+}
+
+async function householdForUser(userId: string): Promise<HouseholdCtx | null> {
   const { data } = await admin()
     .from('household_members')
-    .select('household:households(id, code)')
+    .select('household:households(id, code, collection_start_hour, collection_end_hour)')
     .eq('user_id', userId)
     .limit(1)
     .maybeSingle();
   const hh: any = data?.household;
-  return hh ? { id: hh.id, code: hh.code } : null;
+  if (!hh) return null;
+  return {
+    id: hh.id,
+    code: hh.code,
+    collectionWindow: {
+      start: hh.collection_start_hour ?? 6,
+      end: hh.collection_end_hour ?? 12,
+    },
+  };
 }
 
 function cleanStreams(input: any): WasteStream[] {
@@ -253,6 +267,7 @@ export function mountApiRoutes(app: Express) {
         attempt,
         mediaKind,
         fraudSignals,
+        collectionWindow: hh.collectionWindow,
       });
 
       // --- record fraud flags ---
@@ -313,6 +328,7 @@ export function mountApiRoutes(app: Express) {
         status: decision.status,
         reasonCode: decision.reasonCode,
         reasonText: decision.reasonText,
+        otherReasons: decision.otherReasons ?? [],
         fix: decision.fix,
         creditsAwarded: decision.creditsAwarded,
         confirmedStreams: decision.confirmedStreams,

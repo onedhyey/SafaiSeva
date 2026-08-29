@@ -123,6 +123,7 @@ function toResult(r: VerifyResponse, mediaType: 'photo' | 'video'): Verification
     flags: r.fraudSignals || [],
     imageHash: r.handoverId,
     handoverId: r.handoverId,
+    secondaryReasons: r.otherReasons ?? [],
   };
 }
 
