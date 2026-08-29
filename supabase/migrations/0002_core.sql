@@ -70,7 +70,7 @@ create table if not exists public.households (
   -- Collection window in local (Asia/Kolkata) hours [start, end).
   -- Placeholder values until real route schedules exist (G4).
   collection_start_hour smallint not null default 6,
-  collection_end_hour   smallint not null default 11,
+  collection_end_hour   smallint not null default 12,
 
   -- Behaviour-change tracking (audit P1).
   bin_count             smallint not null default 1,   -- self-reported at onboarding

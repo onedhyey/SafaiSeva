@@ -82,10 +82,10 @@ export const REASONS = {
     fix_gu: 'સંગ્રહ સમયે તમારા નોંધાયેલા સરનામેથી સબમિટ કરો.',
   },
   OUTSIDE_WINDOW: {
-    en: 'Verification failed: this was submitted outside your area’s collection hours.',
-    gu: 'ચકાસણી નિષ્ફળ: આ તમારા વિસ્તારના સંગ્રહ કલાકોની બહાર સબમિટ થયું.',
-    fix_en: 'Submit during your local collection window.',
-    fix_gu: 'તમારા સ્થાનિક સંગ્રહ સમય દરમિયાન સબમિટ કરો.',
+    en: 'Verification failed: this was submitted outside your area’s collection hours ({window}).',
+    gu: 'ચકાસણી નિષ્ફળ: આ તમારા વિસ્તારના સંગ્રહ કલાકો ({window}) ની બહાર સબમિટ થયું.',
+    fix_en: 'Submit during your collection window ({window}).',
+    fix_gu: 'તમારા સંગ્રહ સમય ({window}) દરમિયાન સબમિટ કરો.',
   },
   DAILY_LIMIT_REACHED: {
     en: 'You have already had an approved handover today. Come back tomorrow.',
@@ -125,6 +125,15 @@ function joinStreams(streams: string[] | undefined, lang: Lang): string {
   return streams.map((s) => STREAM_LABELS[lang][s] ?? s).join(', ');
 }
 
+/** "6:00 AM – 12:00 PM" from integer local hours. */
+export function formatWindow(start: number, end: number): string {
+  const h12 = (h: number) => {
+    const hr = h % 12 === 0 ? 12 : h % 12;
+    return `${hr}:00 ${h < 12 || h === 24 ? 'AM' : 'PM'}`;
+  };
+  return `${h12(start)} – ${h12(end)}`;
+}
+
 export interface RenderedReason {
   code: ReasonCode;
   text: string;
@@ -133,13 +142,15 @@ export interface RenderedReason {
 
 export function renderReason(
   code: ReasonCode,
-  opts: { lang?: Lang; streams?: string[] } = {}
+  opts: { lang?: Lang; streams?: string[]; window?: string } = {}
 ): RenderedReason {
   const lang = opts.lang ?? 'en';
   const entry: ReasonEntry = REASONS[code];
   const streamStr = joinStreams(opts.streams, lang);
-  const text = (lang === 'gu' ? entry.gu : entry.en).replace('{streams}', streamStr);
+  const win = opts.window ?? (lang === 'gu' ? 'તમારો સંગ્રહ સમય' : 'your collection window');
+  const sub = (s: string) => s.replace('{streams}', streamStr).replace('{window}', win);
+  const text = sub(lang === 'gu' ? entry.gu : entry.en);
   const fixRaw = lang === 'gu' ? entry.fix_gu : entry.fix_en;
-  const fix = fixRaw ? fixRaw.replace('{streams}', streamStr) : undefined;
+  const fix = fixRaw ? sub(fixRaw) : undefined;
   return { code, text, fix };
 }

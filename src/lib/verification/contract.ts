@@ -52,8 +52,10 @@ export interface Decision {
   confirmedStreams: WasteStream[];
   creditsAwarded: number;
   reasonCode: string;
-  /** Resolved, localized, resident-facing message. */
+  /** Resolved, localized, resident-facing message (headline; already includes any "Also:"). */
   reasonText: string;
+  /** Secondary problems, each a localized sentence — everything wrong beyond the headline. */
+  otherReasons?: string[];
   /** "What to change next time", localized. Present on most non-success decisions. */
   fix?: string;
   /** Machine signals attached to this handover (also written to fraud_flags). */

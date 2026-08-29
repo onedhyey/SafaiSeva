@@ -47,6 +47,7 @@ export interface VerifyResponse {
   status: 'verified' | 'needs_video' | 'in_review' | 'rejected';
   reasonCode: string;
   reasonText: string;
+  otherReasons?: string[];
   fix?: string;
   creditsAwarded: number;
   confirmedStreams: string[];

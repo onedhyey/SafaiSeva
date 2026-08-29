@@ -69,7 +69,7 @@ export function initialSeedData(): {
     },
     collectionWindow: {
       startHour: 6,
-      endHour: 11,
+      endHour: 12,
     },
     balance: 14, // 14 leaves, 6 away from 20 (free ride)
     streakDays: 9,
