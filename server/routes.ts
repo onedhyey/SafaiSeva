@@ -4,7 +4,7 @@
 
 import type { Express, Request, Response } from 'express';
 import { admin } from './supabaseAdmin.ts';
-import { resolvePrincipal } from './principal.ts';
+import { resolvePrincipal, resolveWorker } from './principal.ts';
 import { dHash, sha256, decodeDataUrl } from './phash.ts';
 import { extractFromPhoto, extractFromVideo } from './gemini.ts';
 import { runFraudChecks, istDate, workerCapExceeded } from './fraud.ts';
@@ -560,6 +560,187 @@ export function mountApiRoutes(app: Express) {
     }
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  void workerCapExceeded; // used by the worker-issuance route (Phase 3)
+  // ---------------------------------------------------------------------------------
+  // Karmachari — review queue and manual (no-app) credit issuance (audit A4 / G3 / I7)
+  // ---------------------------------------------------------------------------------
+
+  // GET /api/review-queue — handovers the backend routed to a human.
+  app.get('/api/review-queue', async (req: Request, res: Response) => {
+    try {
+      await resolveWorker(req);
+      const { data } = await admin()
+        .from('v_review_queue')
+        .select('*')
+        .order('created_at', { ascending: true });
+      return res.json({ items: data ?? [] });
+    } catch (e: any) {
+      return fail(res, e.status ?? 500, e.message ?? 'review-queue error');
+    }
+  });
+
+  // POST /api/review-queue/:id/decide  { decision: 'approve' | 'reject', reason?, note? }
+  app.post('/api/review-queue/:id/decide', async (req: Request, res: Response) => {
+    try {
+      const worker = await resolveWorker(req);
+      const db = admin();
+      const decision = req.body?.decision === 'approve' ? 'approve' : 'reject';
+
+      const { data: h } = await db
+        .from('handovers')
+        .select('id, household_id, status, declared_streams, confirmed_streams, collection_date, reward_rules_version')
+        .eq('id', req.params.id)
+        .maybeSingle();
+      if (!h) return fail(res, 404, 'Handover not found.');
+      if (h.status !== 'in_review') return fail(res, 409, 'This handover is no longer in review.');
+
+      const reviewer = `Karmachari ${worker.name} (${worker.workerCode})`;
+      const now = new Date().toISOString();
+
+      if (decision === 'reject') {
+        const reason = String(req.body?.reason || 'Not separated at source').slice(0, 200);
+        await db
+          .from('handovers')
+          .update({
+            status: 'rejected',
+            credits_awarded: 0,
+            decision_reason_code: 'IN_REVIEW_CONFLICT',
+            decision_reason_text: `Karmachari review: ${reason}`,
+            reviewed_by: worker.userId,
+            reviewed_at: now,
+            review_note: String(req.body?.note || '').slice(0, 500) || null,
+          })
+          .eq('id', h.id);
+        return res.json({ status: 'rejected' });
+      }
+
+      // approve: worker vouches for it → credit the confirmed (or declared) streams now.
+      const { version, rules } = await activeRules();
+      const streams: string[] =
+        (h.confirmed_streams?.length ? h.confirmed_streams : h.declared_streams) ?? [];
+      const credits = Math.min(streams.length * rules.per_confirmed_stream, rules.daily_cap_credits);
+      const settleAt = new Date(Date.now() + rules.settlement_hold_hours * 3600_000).toISOString();
+
+      const { error: updErr } = await db
+        .from('handovers')
+        .update({
+          status: 'verified',
+          confirmed_streams: streams,
+          credits_awarded: credits,
+          reward_rules_version: h.reward_rules_version ?? version,
+          decision_reason_code: 'OK_VERIFIED',
+          decision_reason_text: `Approved by ${reviewer} after review.`,
+          settle_at: settleAt,
+          reviewed_by: worker.userId,
+          reviewed_at: now,
+          review_note: String(req.body?.note || '').slice(0, 500) || null,
+        })
+        .eq('id', h.id);
+
+      if (updErr && /handovers_one_verified_per_day/.test(updErr.message)) {
+        return fail(res, 409, 'This household already has an approved handover for that day.');
+      }
+      if (updErr) return fail(res, 500, updErr.message);
+
+      const { error: ledErr } = await db.from('credit_ledger').insert({
+        household_id: h.household_id,
+        entry_type: 'earn',
+        amount: credits,
+        handover_id: h.id,
+        reason: `Handover ${h.collection_date}: approved on review (${streams.join('+')})`,
+        effective_at: settleAt,
+        created_by: worker.userId,
+      });
+      if (ledErr && !/duplicate key/i.test(ledErr.message)) {
+        console.error('[review] ledger insert:', ledErr.message);
+      }
+      return res.json({ status: 'verified', creditsAwarded: credits, settleAt });
+    } catch (e: any) {
+      return fail(res, e.status ?? 500, e.message ?? 'decide error');
+    }
+  });
+
+  // POST /api/worker/issue  { householdCode, streams: [], workerLat?, workerLng?, note? }
+  // A karmachari credits a household at the door (feature phone / no smartphone).
+  app.post('/api/worker/issue', async (req: Request, res: Response) => {
+    try {
+      const worker = await resolveWorker(req);
+      const db = admin();
+
+      const code = String(req.body?.householdCode || '').trim();
+      if (!code) return fail(res, 400, 'A household code is required.');
+      const streams = cleanStreams(req.body?.streams);
+      if (streams.length < 2) return fail(res, 400, 'Confirm at least wet and dry.');
+
+      const issuedDate = istDate(new Date().toISOString());
+      if (await workerCapExceeded(worker.workerId, issuedDate)) {
+        return fail(res, 429, `Daily issuance cap (${worker.dailyIssueCap}) reached.`);
+      }
+
+      const { data: hh } = await db
+        .from('households')
+        .select('id')
+        .eq('code', code)
+        .maybeSingle();
+      if (!hh) return fail(res, 404, `Household ${code} is not registered.`);
+
+      const { rules } = await activeRules();
+      const credits = rules.worker_issue_credits ?? 2;
+
+      // A verified handover row so it shows in the household's history…
+      const { data: handover, error: hErr } = await db
+        .from('handovers')
+        .insert({
+          household_id: hh.id,
+          submitted_by: worker.userId,
+          collection_date: issuedDate,
+          attempt: 1,
+          media_kind: 'photo',
+          declared_streams: streams,
+          confirmed_streams: streams,
+          status: 'verified',
+          credits_awarded: credits,
+          decision_reason_code: 'OK_VERIFIED',
+          decision_reason_text: `Doorstep verification by Karmachari ${worker.name} (${worker.workerCode}).`,
+          reviewed_by: worker.userId,
+          reviewed_at: new Date().toISOString(),
+          client_lat: typeof req.body?.workerLat === 'number' ? req.body.workerLat : null,
+          client_lng: typeof req.body?.workerLng === 'number' ? req.body.workerLng : null,
+        })
+        .select('id')
+        .single();
+      if (hErr && /handovers_one_verified_per_day/.test(hErr.message)) {
+        return fail(res, 409, `${code} already has an approved handover today.`);
+      }
+      if (hErr) return fail(res, 500, hErr.message);
+
+      await db.from('worker_issuances').insert({
+        worker_id: worker.workerId,
+        household_id: hh.id,
+        household_code: code,
+        issued_date: issuedDate,
+        streams,
+        worker_lat: typeof req.body?.workerLat === 'number' ? req.body.workerLat : null,
+        worker_lng: typeof req.body?.workerLng === 'number' ? req.body.workerLng : null,
+        credits,
+        handover_id: handover.id,
+      });
+
+      const { error: ledErr } = await db.from('credit_ledger').insert({
+        household_id: hh.id,
+        entry_type: 'earn',
+        amount: credits,
+        handover_id: handover.id,
+        reason: `Doorstep issuance by ${worker.workerCode}`,
+        effective_at: new Date().toISOString(), // physically verified → no hold
+        created_by: worker.userId,
+      });
+      if (ledErr && !/duplicate key/i.test(ledErr.message)) {
+        console.error('[worker/issue] ledger:', ledErr.message);
+      }
+
+      return res.json({ householdCode: code, creditsAwarded: credits });
+    } catch (e: any) {
+      return fail(res, e.status ?? 500, e.message ?? 'issue error');
+    }
+  });
 }
