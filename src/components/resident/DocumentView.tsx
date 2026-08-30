@@ -580,7 +580,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
             />
 
             {/* Viewfinder Target Framing Guidelines */}
-            <div className="absolute inset-0 pointer-events-none p-4 flex flex-col justify-between">
+            <div className="on-media absolute inset-0 pointer-events-none p-4 flex flex-col justify-between">
               <div className="flex items-center justify-between">
                 <div className="inline-flex items-center gap-1.5 font-mono text-[10px] bg-black/60 text-green px-2 py-0.5 rounded-sm border border-green/30 backdrop-blur-xs">
                   <div className="w-1.5 h-1.5 rounded-full bg-green animate-pulse" />
@@ -1104,7 +1104,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 />
 
                 {/* Overlays */}
-                <div className="absolute inset-0 pointer-events-none p-4 flex flex-col justify-between">
+                <div className="on-media absolute inset-0 pointer-events-none p-4 flex flex-col justify-between">
                   <div className="flex items-center justify-between">
                     <div className="inline-flex items-center gap-1.5 font-mono text-[10px] bg-black/60 text-green px-2 py-0.5 rounded-sm border border-green/30 backdrop-blur-xs">
                       {isRecording ? (

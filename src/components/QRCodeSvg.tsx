@@ -87,7 +87,7 @@ export const QRCodeSvg: React.FC<QRCodeSvgProps> = ({
       viewBox="0 0 100 100"
       width={size}
       height={size}
-      className={`bg-white p-2 rounded-md ${className}`}
+      className={`bg-[#ffffff] p-2 rounded-md ${className}`}
       shapeRendering="crispEdges"
       aria-label={`QR Code for ${value}`}
     >

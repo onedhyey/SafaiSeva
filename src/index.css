@@ -202,7 +202,17 @@ html, body {
   background: #94a3b8;
 }
 
-/* Core containers */
+/* -------------------------------------------------------------------------
+   The app was built dark-first with raw Tailwind palette classes
+   (zinc-*, emerald-950, blue-300 …). Those classes do NOT flow through the
+   themed --color-* tokens, so in light mode they still render their dark
+   value. These rules remap every such class (and its opacity / hover
+   variants) to a light-appropriate value. Attribute selectors ([class*=])
+   are used for the tinted-info-box families because they have no state
+   variants; zinc surfaces keep explicit selectors so :hover stays correct.
+   ------------------------------------------------------------------------- */
+
+/* --- Surfaces: dark fills invert to light --- */
 .light .bg-\[\#08080a\]\/95,
 .light .bg-\[\#08080a\],
 .light .bg-\[\#08080a\]\/90 {
@@ -226,6 +236,7 @@ html, body {
 }
 
 .light .bg-zinc-900,
+.light .bg-zinc-900\/95,
 .light .bg-zinc-900\/90,
 .light .bg-zinc-900\/80 {
   background-color: #ffffff !important;
@@ -233,40 +244,57 @@ html, body {
 }
 
 .light .bg-zinc-950,
-.light .bg-zinc-950\/80,
-.light .bg-zinc-950\/90 {
+.light .bg-zinc-950\/90,
+.light .bg-zinc-950\/80 {
   background-color: #f8fafc !important;
   border-color: #e2e8f0 !important;
 }
 
 .light .bg-zinc-800,
 .light .bg-zinc-800\/80,
-.light .bg-zinc-800\/60 {
+.light .bg-zinc-800\/60,
+.light .bg-zinc-800\/40 {
   background-color: #f1f5f9 !important;
   border-color: #e2e8f0 !important;
 }
 
+.light .bg-zinc-700,
+.light .bg-zinc-700\/80 {
+  background-color: #e2e8f0 !important;
+  border-color: #cbd5e1 !important;
+}
+
+.light .bg-zinc-500 {
+  background-color: #94a3b8 !important;
+}
+
+/* hover surfaces */
+.light .hover\:bg-zinc-900\/90:hover,
 .light .hover\:bg-zinc-900:hover {
   background-color: #f8fafc !important;
 }
-
+.light .hover\:bg-zinc-800\/80:hover,
+.light .hover\:bg-zinc-800\/60:hover,
 .light .hover\:bg-zinc-800:hover {
   background-color: #e2e8f0 !important;
 }
-
 .light .hover\:bg-zinc-700:hover {
   background-color: #cbd5e1 !important;
 }
 
-/* Borders */
-.light .border-zinc-800\/80,
-.light .border-zinc-800\/90,
-.light .border-zinc-800,
-.light .border-zinc-700\/80,
-.light .border-zinc-700\/60,
-.light .border-zinc-700,
-.light .border-zinc-900 {
+/* --- Borders & dividers --- */
+.light [class*="border-zinc-6"],
+.light [class*="border-zinc-7"],
+.light [class*="border-zinc-8"],
+.light [class*="border-zinc-9"],
+.light [class*="border-zinc-3"],
+.light [class*="divide-zinc-"] {
   border-color: #e2e8f0 !important;
+}
+
+.light .hover\:border-zinc-700\/60:hover,
+.light .hover\:border-zinc-700:hover {
+  border-color: #cbd5e1 !important;
 }
 
 .light .border-ink-soft\/40 {
@@ -278,137 +306,78 @@ html, body {
   border-color: #e2e8f0 !important;
 }
 
-/* Typography & Contrast */
-.light .text-zinc-500 {
-  color: #64748b !important;
-}
+/* --- Neutral text: dark-grey scale -> slate scale ---
+   The :not() guard skips state-prefixed variants (hover:/focus:/group-hover:)
+   so hover feedback is preserved; those are handled by the :hover rules below. */
+.light [class*="text-zinc-2"]:not([class*=":text-zinc-2"]) { color: #1e293b !important; }
+.light [class*="text-zinc-3"]:not([class*=":text-zinc-3"]) { color: #334155 !important; }
+.light [class*="text-zinc-4"]:not([class*=":text-zinc-4"]) { color: #475569 !important; }
+.light [class*="text-zinc-5"]:not([class*=":text-zinc-5"]) { color: #64748b !important; }
+.light [class*="text-zinc-6"]:not([class*=":text-zinc-6"]) { color: #64748b !important; }
+.light [class*="text-zinc-1"]:not([class*=":text-zinc-1"]),
+.light [class*="text-zinc-950"]:not([class*=":text-zinc-950"]) { color: #0f172a !important; }
+.light .hover\:text-zinc-200:hover { color: #1e293b !important; }
+.light .hover\:text-zinc-300:hover { color: #334155 !important; }
 
-.light .text-zinc-400 {
-  color: #64748b !important;
-}
+.light .placeholder-zinc-500::placeholder { color: #94a3b8 !important; }
 
-.light .text-zinc-300 {
-  color: #334155 !important;
-}
+.light .text-tint { color: #0f172a !important; }
+.light .text-muted-l { color: #64748b !important; }
 
-.light .text-zinc-200 {
-  color: #1e293b !important;
-}
+/* `text-muted` is really a border token (near-white in light, near-black in
+   dark); when it is (mis)used as a text colour it becomes unreadable. Give
+   the text utility a legible muted grey in both themes. */
+.light .text-muted { color: #64748b !important; }
+.dark .text-muted { color: #52525b !important; }
 
-.light .text-zinc-100,
-.light .text-white {
-  color: #0f172a !important;
-}
+/* --- Tinted info boxes (accent-950 bg / accent-800 border / accent-200-400 text).
+   Base text rules skip state-prefixed variants so a hover/group-hover tint on
+   otherwise-neutral text is left alone; explicit :hover / .group:hover rules
+   then keep that tinted state legible on a light ground. --- */
+.light [class*="bg-emerald-950"] { background-color: #ecfdf5 !important; }
+.light [class*="border-emerald-800"],
+.light [class*="border-emerald-700"] { border-color: #a7f3d0 !important; }
+.light [class*="text-emerald-2"]:not([class*=":text-emerald-2"]),
+.light [class*="text-emerald-3"]:not([class*=":text-emerald-3"]),
+.light [class*="text-emerald-4"]:not([class*=":text-emerald-4"]) { color: #047857 !important; }
+.light .hover\:text-emerald-300:hover,
+.light .group:hover [class*="group-hover:text-emerald-3"] { color: #047857 !important; }
 
-.light .text-tint {
-  color: #0f172a !important;
-}
+.light [class*="bg-amber-950"] { background-color: #fffbeb !important; }
+.light [class*="border-amber-800"] { border-color: #fde68a !important; }
+.light [class*="text-amber-2"]:not([class*=":text-amber-2"]),
+.light [class*="text-amber-3"]:not([class*=":text-amber-3"]),
+.light [class*="text-amber-4"]:not([class*=":text-amber-4"]) { color: #b45309 !important; }
+.light .hover\:text-amber-300:hover,
+.light .group:hover [class*="group-hover:text-amber-3"] { color: #b45309 !important; }
 
-.light .text-muted-l {
-  color: #64748b !important;
-}
+.light [class*="bg-blue-950"] { background-color: #eff6ff !important; }
+.light [class*="border-blue-800"] { border-color: #bfdbfe !important; }
+.light [class*="text-blue-2"]:not([class*=":text-blue-2"]),
+.light [class*="text-blue-3"]:not([class*=":text-blue-3"]),
+.light [class*="text-blue-4"]:not([class*=":text-blue-4"]) { color: #1d4ed8 !important; }
+.light .hover\:text-blue-300:hover,
+.light .group:hover [class*="group-hover:text-blue-3"] { color: #1d4ed8 !important; }
 
-/* Color Badges & Tinted Boxes */
-.light .bg-emerald-950,
-.light .bg-emerald-950\/80,
-.light .bg-emerald-950\/70,
-.light .bg-emerald-950\/60,
-.light .bg-emerald-950\/40 {
-  background-color: #ecfdf5 !important;
-}
+.light [class*="bg-purple-950"] { background-color: #faf5ff !important; }
+.light [class*="border-purple-800"] { border-color: #e9d5ff !important; }
+.light [class*="text-purple-2"]:not([class*=":text-purple-2"]),
+.light [class*="text-purple-3"]:not([class*=":text-purple-3"]),
+.light [class*="text-purple-4"]:not([class*=":text-purple-4"]) { color: #7e22ce !important; }
 
-.light .border-emerald-800,
-.light .border-emerald-800\/60,
-.light .border-emerald-800\/50,
-.light .border-emerald-800\/70,
-.light .border-emerald-700 {
-  border-color: #a7f3d0 !important;
-}
+.light [class*="bg-red-950"] { background-color: #fef2f2 !important; }
+.light [class*="border-red-800"],
+.light [class*="border-red-900"] { border-color: #fecaca !important; }
+.light [class*="text-red-2"]:not([class*=":text-red-2"]),
+.light [class*="text-red-3"]:not([class*=":text-red-3"]),
+.light [class*="text-red-4"]:not([class*=":text-red-4"]) { color: #b91c1c !important; }
+.light .hover\:text-red-300:hover { color: #b91c1c !important; }
 
-.light .text-emerald-400,
-.light .text-emerald-300 {
-  color: #047857 !important;
-}
-
-.light .text-emerald-200 {
-  color: #065f46 !important;
-}
-
-.light .bg-amber-950,
-.light .bg-amber-950\/80,
-.light .bg-amber-950\/70,
-.light .bg-amber-950\/60,
-.light .bg-amber-950\/40 {
-  background-color: #fffbeb !important;
-}
-
-.light .border-amber-800,
-.light .border-amber-800\/70,
-.light .border-amber-800\/60 {
-  border-color: #fde68a !important;
-}
-
-.light .text-amber-400,
-.light .text-amber-300,
-.light .text-amber-200 {
-  color: #b45309 !important;
-}
-
-.light .bg-blue-950,
-.light .bg-blue-950\/80,
-.light .bg-blue-950\/70,
-.light .bg-blue-950\/60 {
-  background-color: #eff6ff !important;
-}
-
-.light .border-blue-800,
-.light .border-blue-800\/70,
-.light .border-blue-800\/50 {
-  border-color: #bfdbfe !important;
-}
-
-.light .text-blue-400,
-.light .text-blue-300 {
-  color: #1d4ed8 !important;
-}
-
-.light .bg-purple-950,
-.light .bg-purple-950\/80,
-.light .bg-purple-950\/70,
-.light .bg-purple-950\/60 {
-  background-color: #faf5ff !important;
-}
-
-.light .border-purple-800,
-.light .border-purple-800\/50 {
-  border-color: #e9d5ff !important;
-}
-
-.light .text-purple-400,
-.light .text-purple-300 {
-  color: #7e22ce !important;
-}
-
-.light .bg-red-950,
-.light .bg-red-950\/80,
-.light .bg-red-950\/40 {
-  background-color: #fef2f2 !important;
-}
-
-.light .border-red-800,
-.light .border-red-800\/80,
-.light .border-red-900\/60 {
-  border-color: #fecaca !important;
-}
-
-.light .text-red-400,
-.light .text-red-300 {
-  color: #b91c1c !important;
-}
-
-/* Inputs & Form Elements */
+/* --- Inputs & form elements --- */
 .light input[type="text"],
 .light input[type="password"],
+.light input[type="search"],
+.light input[type="number"],
 .light select,
 .light textarea {
   background-color: #ffffff !important;
@@ -416,42 +385,61 @@ html, body {
   border-color: #cbd5e1 !important;
 }
 
-.light input::placeholder {
+.light input::placeholder,
+.light textarea::placeholder {
   color: #94a3b8 !important;
 }
 
-/* Solid Fill Buttons: Text Must Stay White */
+/* --- Solid-fill accent buttons: label + icon stay white in light --- */
 .light button.bg-emerald-600,
 .light button.bg-emerald-500,
 .light button.bg-amber-600,
+.light button.bg-amber-500,
 .light button.bg-red-600,
+.light button.bg-red-500,
 .light button.bg-blue-600,
+.light button.bg-blue-500,
 .light .bg-emerald-600,
 .light .bg-emerald-500,
 .light .bg-amber-600,
-.light .bg-green {
+.light .bg-green,
+.light .bg-red,
+.light .bg-amber {
   color: #ffffff !important;
 }
 
-.light button.bg-emerald-600 span,
-.light button.bg-emerald-500 span,
-.light button.bg-amber-600 span,
-.light button.bg-red-600 span,
-.light .bg-gradient-to-r span,
-.light .bg-gradient-to-r svg,
-.light button.bg-emerald-600 svg,
-.light button.bg-emerald-500 svg,
-.light button.bg-amber-600 svg,
-.light button.bg-red-600 svg {
+.light button.bg-emerald-600 :is(span, svg, p),
+.light button.bg-emerald-500 :is(span, svg, p),
+.light button.bg-amber-600 :is(span, svg, p),
+.light button.bg-amber-500 :is(span, svg, p),
+.light button.bg-red-600 :is(span, svg, p),
+.light button.bg-blue-600 :is(span, svg, p),
+.light .bg-emerald-500 :is(span, svg, p),
+.light .bg-emerald-600 :is(span, svg, p),
+.light .bg-gradient-to-r :is(span, svg) {
   color: #ffffff !important;
 }
 
-/* Modals & Popups */
+/* --- Modal scrims & shadows --- */
+.light .bg-black\/95,
+.light .bg-black\/90,
 .light .bg-black\/85,
 .light .bg-black\/80 {
-  background-color: rgba(15, 23, 42, 0.5) !important;
+  background-color: rgba(15, 23, 42, 0.45) !important;
 }
 
 .light .shadow-2xl {
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04) !important;
 }
+
+/* -------------------------------------------------------------------------
+   `.on-media` — overlays that sit on top of a live camera / video feed.
+   Their text and rules must read light-on-dark in BOTH themes, so inside
+   this scope the light-mode remapping above is undone.
+   ------------------------------------------------------------------------- */
+.light .on-media [class*="text-white"] { color: #ffffff !important; }
+.light .on-media [class*="text-muted-l"],
+.light .on-media [class*="text-zinc-3"],
+.light .on-media [class*="text-zinc-4"] { color: rgba(255, 255, 255, 0.78) !important; }
+.light .on-media [class*="border-white"] { border-color: rgba(255, 255, 255, 0.6) !important; }
+.light .on-media [class*="text-tint"] { color: #f4f4f5 !important; }
