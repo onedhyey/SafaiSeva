@@ -96,3 +96,49 @@ export async function resolvePrincipal(req: Request): Promise<Principal> {
   const userId = await getOrCreateDeviceUser(deviceId);
   return { userId, deviceId, mode: 'demo' };
 }
+
+export interface WorkerPrincipal {
+  userId: string;
+  workerId: string;
+  workerCode: string;
+  name: string;
+  wardId: string | null;
+  dailyIssueCap: number;
+}
+
+/**
+ * The karmachari counterpart of resolvePrincipal (audit G3). In demo mode a client that
+ * has taken the Karmachari role sends `x-demo-worker: <worker_code>` and we resolve the
+ * seeded worker row. When auth is enabled this maps the Clerk principal to its own
+ * `workers` row instead — same downstream shape, no code change in the routes.
+ */
+export async function resolveWorker(req: Request): Promise<WorkerPrincipal> {
+  const db = admin();
+  const deny = (msg: string) => {
+    const e: any = new Error(msg);
+    e.status = 403;
+    return e;
+  };
+
+  let query;
+  if (env.authEnabled) {
+    const principal = await resolvePrincipal(req);
+    query = db.from('workers').select('*').eq('user_id', principal.userId);
+  } else {
+    const code = (req.header('x-demo-worker') || '').trim();
+    if (!code) throw deny('Karmachari role required for this action.');
+    query = db.from('workers').select('*').eq('worker_code', code);
+  }
+
+  const { data: w } = await query.eq('active', true).maybeSingle();
+  if (!w) throw deny('No active karmachari record for this session.');
+
+  return {
+    userId: w.user_id,
+    workerId: w.id,
+    workerCode: w.worker_code,
+    name: w.name,
+    wardId: w.ward_id ?? null,
+    dailyIssueCap: w.daily_issue_cap ?? 25,
+  };
+}

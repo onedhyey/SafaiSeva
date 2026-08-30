@@ -622,6 +622,20 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
               </div>
             </div>
 
+            {/* Permission-pending state: getUserMedia() called, prompt not yet answered */}
+            {!isCameraActive && !cameraError && (
+              <div className="absolute inset-0 bg-ink/95 p-4 flex flex-col items-center justify-center text-center space-y-3">
+                <RefreshCw size={28} className="text-green animate-spin" />
+                <div>
+                  <div className="text-xs font-semibold text-tint">Waiting for camera</div>
+                  <p className="text-[11px] text-muted-l mt-1 max-w-[260px] leading-relaxed">
+                    Tap <span className="font-semibold text-tint">Allow</span> when your browser asks
+                    for camera access. The live feed is the only way to submit a handover.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Camera Error / Fallback State */}
             {cameraError && (
               <div className="absolute inset-0 bg-ink/95 p-4 flex flex-col items-center justify-center text-center space-y-3">

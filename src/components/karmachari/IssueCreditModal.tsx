@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { X, Check, Search, ShieldCheck, AlertCircle, MapPin, Edit3 } from 'lucide-react';
+import { X, Check, ShieldCheck, MapPin, Edit3 } from 'lucide-react';
 import { LeafGlyph } from '../LeafGlyph';
-import { HandoverRecord, LocationData } from '../../types';
-import { addHandover } from '../../lib/db';
-import { createBinPhotoSvg } from '../../lib/seed';
+import { LocationData } from '../../types';
+import { workerIssue } from '../../lib/api';
 import { LocationPickerModal } from '../LocationPickerModal';
 
 interface IssueCreditModalProps {
@@ -25,6 +24,7 @@ export const IssueCreditModal: React.FC<IssueCreditModalProps> = ({
   const [selectedStreamDry, setSelectedStreamDry] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLocationPickerOpen, setIsLocationPickerOpen] = useState<boolean>(false);
   const [workerLocation, setWorkerLocation] = useState<LocationData>({
     lat: 23.03842,
@@ -39,71 +39,40 @@ export const IssueCreditModal: React.FC<IssueCreditModalProps> = ({
   if (!isOpen) return null;
 
   // Preset known offline households for quick worker selection
+  // Registered "no smartphone" households (seeded in 0013).
   const quickHouseholds = [
-    { id: 'HH-NV-0188', name: 'Gordhanbhai Rabari (No Smartphone)', address: 'Chawl No. 4, Mithakhali' },
-    { id: 'HH-NV-0245', name: 'Kavita Ben Vankar (Elderly Citizen)', address: 'Block C-12, Navrangpura Gaam' },
-    { id: 'HH-NV-0631', name: 'Munna Bhai Ansari (AMC Manual Record)', address: 'Gulbai Tekra Slum Pocket' },
+    { id: 'HH-NV-0188', name: 'Chawl No. 4, Mithakhali (no smartphone)', address: 'Navrangpura' },
+    { id: 'HH-NV-0245', name: 'Block C-12, Navrangpura Gaam (elderly)', address: 'Navrangpura' },
   ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!householdId.trim()) return;
+    const code = householdId.trim();
+    if (!code) return;
 
     setIsSubmitting(true);
-    const now = new Date();
-    const dateStr = now.toISOString().split('T')[0];
-
-    const manualRecord: HandoverRecord = {
-      id: `HND-MANUAL-${Date.now()}-${householdId.replace(/[^a-zA-Z0-9]/g, '')}`,
-      householdId: householdId.trim(),
-      householdName: householdName.trim() || `AMC Household ${householdId.trim()}`,
-      ward: workerLocation.ward || 'Ward 12 - Navrangpura',
-      timestamp: now.toISOString(),
-      dateString: dateStr,
-      photoUrl: createBinPhotoSvg(`Manual Worker Verification / ${workerId}`, true, '#19A85B'),
-      imageHash: `manual_worker_hash_${Date.now()}`,
-      location: workerLocation,
-      streamsConfirmed: {
-        wet: selectedStreamWet,
-        dry: selectedStreamDry,
-        sanitary: false,
-        special_care: false,
-      },
-      verification: {
-        status: 'verified',
-        decisionReason: `Direct physical verification by Karmachari ${workerId}. 4-stream compliance confirmed at doorstep.`,
-        creditsAwarded: 2,
-        confidence: 1.0,
-        flags: ['offline_equity_manual_issue'],
-        imageHash: `manual_worker_hash_${Date.now()}`,
-        stages: [
-          { id: '1', label: 'Doorstep physical inspection', detail: 'Worker confirmed 4 streams physically separated.', passed: true },
-          { id: '2', label: 'Anti-gaming doorstep check', detail: 'Physical receipt logged on route.', passed: true },
-          { id: '3', label: 'Offline equity guarantee', detail: 'Credits credited directly to household account.', passed: true },
-        ],
-        streams: {
-          wet: { detected: true, status: 'clean', note: 'Physically inspected by worker', verdict: 'clean' },
-          dry: { detected: true, status: 'clean', note: 'Physically inspected by worker', verdict: 'clean' },
-          sanitary: { detected: false, status: 'none', note: 'None', verdict: 'none' },
-          special_care: { detected: false, status: 'none', note: 'None', verdict: 'none' },
-        },
-      },
-      status: 'verified',
-      creditsAwarded: 2,
-      source: 'manual_worker',
-      reviewedBy: `Karmachari ${workerId}`,
-      reviewedAt: now.toISOString(),
-    };
-
-    await addHandover(manualRecord);
-    await onCreditIssued();
-    setIsSubmitting(false);
-    setSuccessMessage(`2 Credits issued to ${householdId}!`);
-
-    setTimeout(() => {
-      setSuccessMessage(null);
-      onClose();
-    }, 1200);
+    setErrorMessage(null);
+    try {
+      const streams = [selectedStreamWet && 'wet', selectedStreamDry && 'dry'].filter(
+        Boolean
+      ) as string[];
+      const res = await workerIssue({
+        householdCode: code,
+        streams,
+        workerLat: workerLocation.lat,
+        workerLng: workerLocation.lng,
+      });
+      setSuccessMessage(`${res.creditsAwarded} leaves issued to ${res.householdCode}`);
+      await onCreditIssued();
+      setTimeout(() => {
+        setSuccessMessage(null);
+        onClose();
+      }, 1400);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Could not issue credit.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -137,6 +106,11 @@ export const IssueCreditModal: React.FC<IssueCreditModalProps> = ({
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
+            {errorMessage && (
+              <div className="bg-red-950/50 border border-red-500/40 rounded-lg p-2.5 text-[11px] text-red-300">
+                {errorMessage}
+              </div>
+            )}
             {/* Quick Pick Offline Households */}
             <div className="space-y-1.5">
               <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-wider">
@@ -253,7 +227,7 @@ export const IssueCreditModal: React.FC<IssueCreditModalProps> = ({
                 className="w-2/3 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
               >
                 <LeafGlyph size={14} color="#000000" />
-                <span>{isSubmitting ? 'Recording...' : 'Grant 2 Credits'}</span>
+                <span>{isSubmitting ? 'Issuing…' : 'Issue leaves'}</span>
               </button>
             </div>
           </form>

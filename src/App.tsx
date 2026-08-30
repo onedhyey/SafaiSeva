@@ -297,11 +297,7 @@ export default function App() {
 
               {/* KARMACHARI VIEW */}
               {activeRole === 'karmachari' && (
-                <KarmachariView
-                  karmachari={karmachari}
-                  handovers={handovers}
-                  onRefreshData={loadData}
-                />
+                <KarmachariView karmachari={karmachari} onRefreshData={loadData} />
               )}
 
               {/* WARD OFFICER VIEW */}

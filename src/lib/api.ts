@@ -99,12 +99,18 @@ export interface VerifyResponse {
   settleAt?: string | null;
 }
 
-async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+// Demo-only: the seeded karmachari. When auth is enabled the worker routes use the Clerk
+// principal's own `workers` row instead and this header is ignored (see server/principal.ts).
+export const DEMO_WORKER_CODE = 'AMC-WZ-109';
+
+async function apiFetch<T>(path: string, init: RequestInit & { asWorker?: boolean } = {}): Promise<T> {
+  const { asWorker, ...rest } = init;
   const res = await fetch(path, {
-    ...init,
+    ...rest,
     headers: {
       'Content-Type': 'application/json',
       'x-device-id': getDeviceId(),
+      ...(asWorker ? { 'x-demo-worker': DEMO_WORKER_CODE } : {}),
       ...(init.headers || {}),
     },
   });
@@ -150,5 +156,53 @@ export function redeemTicket(transitType: string): Promise<RedeemResponse> {
   return apiFetch<RedeemResponse>('/api/tickets/redeem', {
     method: 'POST',
     body: JSON.stringify({ transitType }),
+  });
+}
+
+// ---- Karmachari ----
+export interface ReviewItem {
+  handover_id: string;
+  household_code: string;
+  address: string;
+  ward_name: string;
+  collection_date: string;
+  attempt: number;
+  declared_streams: string[];
+  decision_reason_code: string | null;
+  decision_reason_text: string | null;
+  created_at: string;
+  overall_confidence: number | null;
+  recapture_likelihood: number | null;
+  per_stream: Record<string, { visible: boolean; contamination: string; note: string }>;
+  fraud_signals: string[];
+}
+
+export function getReviewQueue(): Promise<{ items: ReviewItem[] }> {
+  return apiFetch('/api/review-queue', { asWorker: true });
+}
+
+export function decideReview(
+  id: string,
+  decision: 'approve' | 'reject',
+  opts: { reason?: string; note?: string } = {}
+): Promise<{ status: string; creditsAwarded?: number }> {
+  return apiFetch(`/api/review-queue/${id}/decide`, {
+    method: 'POST',
+    asWorker: true,
+    body: JSON.stringify({ decision, ...opts }),
+  });
+}
+
+export function workerIssue(payload: {
+  householdCode: string;
+  streams: string[];
+  workerLat?: number;
+  workerLng?: number;
+  note?: string;
+}): Promise<{ householdCode: string; creditsAwarded: number }> {
+  return apiFetch('/api/worker/issue', {
+    method: 'POST',
+    asWorker: true,
+    body: JSON.stringify(payload),
   });
 }
