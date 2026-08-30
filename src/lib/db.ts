@@ -16,7 +16,9 @@ const STORAGE_KEYS = {
   KARMACHARI: 'safaiseva_karmachari_v1',
   WARD_STATS: 'safaiseva_ward_stats_v1',
   SETTINGS: 'safaiseva_settings_v1',
-  INITIALIZED: 'safaiseva_initialized_v1',
+  // Bump when the local seed shape changes so existing browsers re-seed automatically
+  // (v2: polished demo-resident state — curated history, sorted leaderboard).
+  INITIALIZED: 'safaiseva_initialized_v2',
 };
 
 // Safe storage wrapper (supports IndexedDB with localStorage fallback)

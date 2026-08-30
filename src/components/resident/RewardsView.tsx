@@ -79,7 +79,8 @@ export const RewardsView: React.FC<RewardsViewProps> = ({
   };
 
   const activeTickets = tickets.filter((t) => t.status === 'active');
-  const pastTickets = tickets.filter((t) => t.status !== 'active');
+  // Only redemptions the resident actually boarded — voided/expired ones aren't "past rides".
+  const pastTickets = tickets.filter((t) => t.status === 'used');
 
   return (
     <div className="space-y-5 pb-20 pt-1 text-left select-none">
@@ -207,7 +208,7 @@ export const RewardsView: React.FC<RewardsViewProps> = ({
                   </div>
                   <div>
                     <div className="text-xs font-bold text-white">{t.title}</div>
-                    <div className="text-[11px] text-muted-l font-mono">{t.id}</div>
+                    <div className="text-[11px] text-muted-l">{t.route}</div>
                   </div>
                 </div>
 
@@ -223,6 +224,7 @@ export const RewardsView: React.FC<RewardsViewProps> = ({
         )}
 
         {/* Past Tickets */}
+        {pastTickets.length > 0 && (
         <div className="space-y-1.5">
           <div className="text-[11px] font-mono text-muted-l px-1">Past Redemptions</div>
           {pastTickets.map((t) => (
@@ -233,7 +235,7 @@ export const RewardsView: React.FC<RewardsViewProps> = ({
             >
               <div>
                 <div className="text-xs font-medium text-tint">{t.title}</div>
-                <div className="text-[10px] text-muted font-mono">{t.id} · Used</div>
+                <div className="text-[10px] text-muted-l">{t.route} · Used</div>
               </div>
               <div className="text-right font-mono text-xs text-muted">
                 {new Date(t.redeemedAt).toLocaleDateString('en-IN', {
@@ -244,6 +246,7 @@ export const RewardsView: React.FC<RewardsViewProps> = ({
             </div>
           ))}
         </div>
+        )}
       </div>
     </div>
   );

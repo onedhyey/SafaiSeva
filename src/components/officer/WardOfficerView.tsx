@@ -213,15 +213,24 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
 
             <div className="divide-y divide-muted/15 text-xs font-mono">
               {handovers.slice(0, 5).map((h) => (
-                <div key={h.id} className="py-2 flex items-center justify-between text-muted-l">
-                  <div>
-                    <div className="text-tint font-medium">{h.id}</div>
+                <div key={h.id} className="py-2 flex items-start justify-between gap-3 text-muted-l">
+                  <div className="min-w-0">
+                    <div className="text-tint font-medium">
+                      {h.householdId}
+                      <span className="text-muted ml-1.5 text-[10px] font-normal">
+                        {new Date(h.timestamp).toLocaleTimeString('en-IN', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
                     <div className="text-[10px] text-muted">
-                      {h.householdId} · {h.source === 'manual_worker' ? 'Worker Direct' : 'Edge AI'}
+                      {h.source === 'manual_worker' ? 'Worker Direct' : 'Edge AI'} · #
+                      {String(h.id).replace(/-/g, '').slice(0, 8)}
                     </div>
                   </div>
 
-                  <div className="text-right">
+                  <div className="text-right shrink-0 max-w-[46%]">
                     <div
                       className={`font-semibold uppercase text-[10px] ${
                         h.status === 'verified'
@@ -233,7 +242,7 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
                     >
                       {h.status}
                     </div>
-                    <div className="text-[9px] text-muted truncate max-w-[130px]">
+                    <div className="text-[9px] text-muted leading-tight">
                       {h.verification.decisionReason}
                     </div>
                   </div>
