@@ -1,24 +1,44 @@
-import React from 'react';
-import { X, MapPin, Clock, ShieldCheck, Check, AlertTriangle } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, MapPin, Clock, ShieldCheck, Check, AlertTriangle, Flag } from 'lucide-react';
 import { HandoverRecord } from '../types';
 import { LeafGlyph } from './LeafGlyph';
+import { disputeHandover } from '../lib/api';
 
 interface HandoverDetailModalProps {
   handover: HandoverRecord | null;
   isOpen: boolean;
   onClose: () => void;
+  onDisputed?: () => void;
 }
 
 export const HandoverDetailModal: React.FC<HandoverDetailModalProps> = ({
   handover,
   isOpen,
   onClose,
+  onDisputed,
 }) => {
+  const [disputeState, setDisputeState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle');
+  const [disputeMsg, setDisputeMsg] = useState('');
+
   if (!isOpen || !handover) return null;
 
   const isVerified = handover.status === 'verified';
   const isInReview = handover.status === 'in_review';
   const isRejected = handover.status === 'rejected';
+  // Server handovers use a uuid id; local seed rows use HND-... ids and can't be disputed.
+  const canDispute =
+    isRejected && /^[0-9a-f-]{36}$/.test(handover.id) && disputeState !== 'done';
+
+  const submitDispute = async () => {
+    setDisputeState('sending');
+    try {
+      await disputeHandover(handover.id, disputeMsg);
+      setDisputeState('done');
+      onDisputed?.();
+    } catch {
+      setDisputeState('error');
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm select-none font-sans">
@@ -126,6 +146,42 @@ export const HandoverDetailModal: React.FC<HandoverDetailModalProps> = ({
             </div>
           )}
         </div>
+
+        {/* Dispute a rejection (audit A4) */}
+        {(canDispute || disputeState === 'done') && (
+          <div className="mt-4 pt-3 border-t border-zinc-800">
+            {disputeState === 'done' ? (
+              <div className="text-[11px] text-emerald-400 flex items-center gap-1.5">
+                <Check size={13} />
+                <span>Sent for a karmachari to check. You’ll see the result in your history.</span>
+              </div>
+            ) : (
+              <>
+                <label className="text-[11px] font-semibold text-white flex items-center gap-1.5">
+                  <Flag size={12} className="text-amber-400" />
+                  <span>Think this is wrong? Ask for a review</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={disputeMsg}
+                  onChange={(e) => setDisputeMsg(e.target.value)}
+                  placeholder="Briefly, what looks wrong? (optional)"
+                  className="mt-1.5 w-full bg-zinc-950 border border-zinc-700/80 rounded-lg p-2 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-amber-500"
+                />
+                {disputeState === 'error' && (
+                  <div className="text-[11px] text-red-400 mt-1">Couldn’t send. Try again.</div>
+                )}
+                <button
+                  onClick={submitDispute}
+                  disabled={disputeState === 'sending'}
+                  className="mt-2 w-full bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-semibold py-2 rounded-lg transition-colors"
+                >
+                  {disputeState === 'sending' ? 'Sending…' : 'Request a review'}
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
