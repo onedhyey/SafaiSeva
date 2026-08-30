@@ -64,7 +64,7 @@ export const TicketModal: React.FC<TicketModalProps> = ({
         </div>
 
         {/* QR Code Container - Illuminated Optical Surface */}
-        <div className="flex flex-col items-center justify-center bg-white p-4 rounded-lg border border-zinc-300 my-3 shadow-inner">
+        <div className="flex flex-col items-center justify-center bg-[#ffffff] p-4 rounded-lg border border-zinc-300 my-3 shadow-inner">
           <QRCodeSvg value={ticket.qrPayload} size={170} />
           <div className="mt-3 font-mono text-xs text-black font-bold tracking-wider">
             {ticket.id}
