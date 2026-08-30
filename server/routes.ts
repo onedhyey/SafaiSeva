@@ -9,6 +9,7 @@ import { dHash, sha256, decodeDataUrl } from './phash.ts';
 import { extractFromPhoto, extractFromVideo } from './gemini.ts';
 import { runFraudChecks, istDate, workerCapExceeded } from './fraud.ts';
 import { uploadEvidence } from './storage.ts';
+import { signTicket } from './qrToken.ts';
 import { adjudicate } from '../src/lib/verification/adjudicator.ts';
 import { FALLBACK_RULES, RewardRules, WasteStream, ALL_STREAMS } from '../src/lib/verification/contract.ts';
 import { renderReason } from '../src/lib/verification/reasonCodes.ts';
@@ -447,6 +448,76 @@ export function mountApiRoutes(app: Express) {
     } catch (e: any) {
       console.error('[verify] error:', e);
       return fail(res, e.status ?? 500, e.message ?? 'verification error');
+    }
+  });
+
+  // ---------------------------------------------------------------------------------
+  // POST /api/tickets/redeem — spend leaves on a transit ticket.
+  //   body: { transitType: 'janmarg_brts' | 'ahmedabad_metro' | 'janmarg_day_pass' }
+  // Atomic (app.redeem_ticket locks the household); writes the ticket + a 'spend' ledger
+  // row. The QR token is HMAC-signed (audit I6). Real fare-gate validation needs a
+  // transit partnership (G2).
+  // ---------------------------------------------------------------------------------
+  app.post('/api/tickets/redeem', async (req: Request, res: Response) => {
+    try {
+      const principal = await resolvePrincipal(req);
+      const hh = await householdForUser(principal.userId);
+      if (!hh) return fail(res, 409, 'No household is linked to this session.');
+
+      const CATALOG: Record<string, { title: string; route: string }> = {
+        janmarg_brts: { title: 'Janmarg BRTS Single Ride', route: 'Any Janmarg BRTS corridor, Ahmedabad' },
+        ahmedabad_metro: { title: 'Metro Single Ride', route: 'GMRC Ahmedabad Metro network' },
+        janmarg_day_pass: { title: 'Janmarg Day Pass', route: 'All Janmarg BRTS corridors (24h)' },
+      };
+      const transitType = String(req.body?.transitType || '');
+      const item = CATALOG[transitType];
+      if (!item) return fail(res, 400, 'Unknown transit ticket.');
+
+      const { rules } = await activeRules();
+      const cost = rules.redeem?.[transitType];
+      if (!cost || cost <= 0) return fail(res, 400, 'This ticket is not available right now.');
+
+      const expiresAt = new Date(Date.now() + 24 * 3600_000).toISOString();
+      const db = admin();
+
+      const { data: ticket, error } = await db.rpc('redeem_ticket', {
+        p_household: hh.id,
+        p_redeemed_by: principal.userId,
+        p_transit: transitType,
+        p_title: item.title,
+        p_route: item.route,
+        p_cost: cost,
+        p_expires_at: expiresAt,
+      });
+
+      if (error) {
+        if (/insufficient balance/i.test(error.message)) {
+          return fail(res, 402, `Not enough leaves — this ticket costs ${cost}.`);
+        }
+        return fail(res, 500, `redeem failed: ${error.message}`);
+      }
+
+      const t: any = ticket;
+      const token = signTicket({
+        tid: t.id,
+        hh: hh.id,
+        type: transitType,
+        exp: Math.floor(new Date(expiresAt).getTime() / 1000),
+      });
+      await db.from('tickets').update({ token }).eq('id', t.id);
+
+      const { data: bal } = await db
+        .from('v_household_balance')
+        .select('settled_balance')
+        .eq('household_id', hh.id)
+        .maybeSingle();
+
+      return res.json({
+        ticket: { ...t, token },
+        balance: bal?.settled_balance ?? 0,
+      });
+    } catch (e: any) {
+      return fail(res, e.status ?? 500, e.message ?? 'redeem error');
     }
   });
 

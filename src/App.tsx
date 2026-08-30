@@ -22,7 +22,7 @@ import {
 } from './lib/db';
 import { useAuth } from './lib/authContext';
 import { getWallet, BinsInfo } from './lib/api';
-import { serverHandoverToRecord } from './lib/serverMap';
+import { serverHandoverToRecord, serverTicketToRecord } from './lib/serverMap';
 import { BinSetupModal } from './components/resident/BinSetupModal';
 import { RoleSwitcher } from './components/RoleSwitcher';
 import { BottomNav, ResidentTab } from './components/BottomNav';
@@ -66,6 +66,9 @@ export default function App() {
   const [bins, setBins] = useState<BinsInfo | null>(null);
   const [binModalOpen, setBinModalOpen] = useState<boolean>(false);
 
+  // Server-backed reward costs (fallback to nothing until the wallet call returns)
+  const [redeemCosts, setRedeemCosts] = useState<Record<string, number>>({});
+
   const currentTheme: AppTheme = settings.theme || 'light';
 
   // Synchronize theme to document body & root html
@@ -100,6 +103,7 @@ export default function App() {
 
       let mergedHousehold = hh;
       let mergedHandovers = hnds;
+      let mergedTickets = tkts;
 
       try {
         const wallet = await getWallet();
@@ -117,7 +121,9 @@ export default function App() {
             ...serverRecords,
             ...hnds.filter((h) => h.householdId !== hh.id),
           ];
+          mergedTickets = wallet.tickets.map(serverTicketToRecord);
           setBins(wallet.bins ?? null);
+          setRedeemCosts(wallet.redeem ?? {});
           if (wallet.bins && !wallet.bins.onboarded) setBinModalOpen(true);
         }
       } catch (e) {
@@ -126,7 +132,7 @@ export default function App() {
 
       setHousehold(mergedHousehold);
       setHandovers(mergedHandovers);
-      setTickets(tkts);
+      setTickets(mergedTickets);
       setKarmachari(karm);
       setWardStats(ward);
       setSettings(sett);
@@ -140,6 +146,12 @@ export default function App() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Keep the wallet fresh when the resident moves between tabs (audit F1).
+  useEffect(() => {
+    if (!loading) loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [residentTab]);
 
   // Handle Role Switch
   const handleRoleChange = (newRole: Role) => {
@@ -267,6 +279,7 @@ export default function App() {
                     <RewardsView
                       household={activeHousehold}
                       tickets={tickets}
+                      redeemCosts={redeemCosts}
                       onOpenTicketModal={(t) => setSelectedTicket(t)}
                       onRefreshData={loadData}
                     />

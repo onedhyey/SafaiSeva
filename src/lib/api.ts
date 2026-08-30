@@ -11,15 +11,33 @@ export interface BinsInfo {
   milestoneCredits: { two_bins: number; four_bins: number; six_bins: number };
 }
 
+export interface ServerTicket {
+  id: string;
+  transit_type: string;
+  title: string;
+  route: string | null;
+  credits_spent: number;
+  token: string | null;
+  status: 'active' | 'used' | 'expired' | 'void';
+  redeemed_at: string;
+  expires_at: string;
+  used_at: string | null;
+}
+
 export interface WalletResponse {
   householdCode: string | null;
   balance: number;
   pending: number;
   lifetimeEarned?: number;
   handovers: ServerHandover[];
-  tickets: any[];
+  tickets: ServerTicket[];
   bins?: BinsInfo;
   redeem?: Record<string, number>;
+}
+
+export interface RedeemResponse {
+  ticket: ServerTicket & { token: string };
+  balance: number;
 }
 
 export interface SetBinsResponse {
@@ -125,5 +143,12 @@ export function setBinCount(binCount: number): Promise<SetBinsResponse> {
   return apiFetch<SetBinsResponse>('/api/household/bins', {
     method: 'POST',
     body: JSON.stringify({ binCount }),
+  });
+}
+
+export function redeemTicket(transitType: string): Promise<RedeemResponse> {
+  return apiFetch<RedeemResponse>('/api/tickets/redeem', {
+    method: 'POST',
+    body: JSON.stringify({ transitType }),
   });
 }

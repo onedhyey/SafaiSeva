@@ -1,90 +1,81 @@
 import React, { useState } from 'react';
 import { HouseholdProfile, TicketRecord, TransitType } from '../../types';
 import { LeafGlyph } from '../LeafGlyph';
-import { Bus, Train, Ticket, Clock, Check, ChevronRight, AlertCircle } from 'lucide-react';
-import { addTicket } from '../../lib/db';
+import { Bus, Train, Ticket, ChevronRight, AlertCircle } from 'lucide-react';
+import { redeemTicket } from '../../lib/api';
+import { serverTicketToRecord } from '../../lib/serverMap';
 
 interface RewardsViewProps {
   household: HouseholdProfile;
   tickets: TicketRecord[];
+  /** Server-authoritative leaf cost per transit type. */
+  redeemCosts: Record<string, number>;
   onOpenTicketModal: (ticket: TicketRecord) => void;
   onRefreshData: () => Promise<void>;
 }
 
+const CATALOG: {
+  type: TransitType;
+  title: string;
+  route: string;
+  icon: React.ElementType;
+  description: string;
+}[] = [
+  {
+    type: 'janmarg_brts',
+    title: 'Janmarg BRTS Single Ride',
+    route: 'Any Janmarg BRTS corridor, Ahmedabad',
+    icon: Bus,
+    description: 'One journey on any Janmarg BRTS corridor.',
+  },
+  {
+    type: 'ahmedabad_metro',
+    title: 'Metro Single Ride',
+    route: 'GMRC Ahmedabad Metro network',
+    icon: Train,
+    description: 'Single transit token for the Ahmedabad Metro.',
+  },
+  {
+    type: 'janmarg_day_pass',
+    title: 'Janmarg Day Pass',
+    route: 'All Janmarg BRTS corridors (24h)',
+    icon: Ticket,
+    description: 'Unlimited 24-hour travel on all Janmarg BRTS buses.',
+  },
+];
+
 export const RewardsView: React.FC<RewardsViewProps> = ({
   household,
   tickets,
+  redeemCosts,
   onOpenTicketModal,
   onRefreshData,
 }) => {
   const [redeeming, setRedeeming] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const rewardOptions: {
-    type: TransitType;
-    title: string;
-    route: string;
-    cost: number;
-    icon: React.ElementType;
-    description: string;
-  }[] = [
-    {
-      type: 'janmarg_brts',
-      title: 'Janmarg BRTS Single Ride',
-      route: 'Route 4D: RTO Circle → Gita Mandir',
-      cost: 20,
-      icon: Bus,
-      description: 'Valid for one journey on any Janmarg BRTS corridor in Ahmedabad.',
-    },
-    {
-      type: 'ahmedabad_metro',
-      title: 'Metro Single Ride',
-      route: 'East-West Corridor: Thaltej → Vastral Gam',
-      cost: 20,
-      icon: Train,
-      description: 'Single transit token for GMRC Ahmedabad Metro Rail network.',
-    },
-    {
-      type: 'janmarg_day_pass',
-      title: 'Janmarg Day Pass',
-      route: 'All Ahmedabad Janmarg BRTS Corridors',
-      cost: 50,
-      icon: Ticket,
-      description: 'Unlimited 24-hour hop-on hop-off travel on all Janmarg BRTS buses.',
-    },
-  ];
+  const rewardOptions = CATALOG.map((c) => ({ ...c, cost: redeemCosts[c.type] ?? 0 })).filter(
+    (c) => c.cost > 0
+  );
 
   const handleRedeem = async (opt: (typeof rewardOptions)[0]) => {
     setErrorMessage(null);
     if (household.balance < opt.cost) {
       setErrorMessage(
-        `Insufficient leaves. You have ${household.balance} leaves, but this reward requires ${opt.cost} leaves.`
+        `Not enough leaves. You have ${household.balance}; this ticket costs ${opt.cost}.`
       );
       return;
     }
-
     setRedeeming(opt.type);
-
-    const now = new Date();
-    const expires = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24h validity
-    const ticketId = `TKT-${opt.type.toUpperCase()}-${Math.floor(10000 + Math.random() * 90000)}`;
-
-    const newTicket: TicketRecord = {
-      id: ticketId,
-      transitType: opt.type,
-      title: opt.title,
-      route: opt.route,
-      creditsSpent: opt.cost,
-      redeemedAt: now.toISOString(),
-      expiresAt: expires.toISOString(),
-      qrPayload: `SAFAISEVA-TRANSIT-${ticketId}-${now.toISOString().split('T')[0]}-VALID`,
-      status: 'active',
-    };
-
-    await addTicket(newTicket);
-    await onRefreshData();
-    setRedeeming(null);
-    onOpenTicketModal(newTicket);
+    try {
+      const res = await redeemTicket(opt.type);
+      await onRefreshData();
+      onOpenTicketModal(serverTicketToRecord(res.ticket));
+    } catch (e: any) {
+      setErrorMessage(e.message || 'Could not redeem. Try again.');
+    } finally {
+      setRedeeming(null);
+    }
   };
 
   const activeTickets = tickets.filter((t) => t.status === 'active');
@@ -108,7 +99,9 @@ export const RewardsView: React.FC<RewardsViewProps> = ({
         </div>
         <div className="text-right text-xs text-muted-l font-mono">
           <div>AMC Civic Economy</div>
-          <div className="text-tint font-semibold">20 leaves = 1 Free Ride</div>
+          <div className="text-tint font-semibold">
+            {redeemCosts.janmarg_brts ?? 20} leaves = 1 free ride
+          </div>
         </div>
       </div>
 
