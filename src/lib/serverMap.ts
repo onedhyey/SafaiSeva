@@ -7,9 +7,24 @@ import {
   HandoverStatus,
   HouseholdProfile,
   StreamChecklist,
+  TicketRecord,
   VerificationResult,
 } from '../types';
-import { ServerHandover } from './api';
+import { ServerHandover, ServerTicket } from './api';
+
+export function serverTicketToRecord(t: ServerTicket): TicketRecord {
+  return {
+    id: t.id,
+    transitType: t.transit_type as TicketRecord['transitType'],
+    title: t.title,
+    route: t.route ?? '',
+    creditsSpent: t.credits_spent,
+    redeemedAt: t.redeemed_at,
+    expiresAt: t.expires_at,
+    qrPayload: t.token ?? t.id,
+    status: t.status === 'void' ? 'expired' : t.status,
+  };
+}
 
 export function streamArrayToChecklist(streams: string[] | null | undefined): StreamChecklist {
   const s = streams ?? [];

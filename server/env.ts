@@ -27,6 +27,7 @@ export const env = {
   clerkSecretKey: pick('CLERK_SECRET_KEY'),
 
   appUrl: pick('APP_URL'),
+  qrSigningSecret: pick('QR_SIGNING_SECRET'),
 };
 
 export function supabaseConfigured(): boolean {
