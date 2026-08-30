@@ -4,7 +4,13 @@
 
 A mobile web app that rewards households for separating their waste — and pays them in public transport.
 
-Photograph your four separated streams when the collection van arrives. AI checks they're genuinely sorted. Every approved handover earns 2 leaf credits, and 20 credits is a free ride on Janmarg BRTS or the Ahmedabad Metro.
+Set up separate bins at home, then photograph your sorted streams at handover. A vision model checks what's actually in the frame; the backend decides the outcome. Reaching 2 / 4 / 6 bins pays a one‑time bonus, each verified handover pays 1 leaf per confirmed stream (2–4), and 20 leaves is a free ride on Janmarg BRTS or the Ahmedabad Metro.
+
+> **State of the build:** the resident loop — bin onboarding, handover verification, the
+> credit ledger with a 24 h hold, and ticket redemption — runs against a real Supabase
+> backend with a real Gemini vision check and server‑side fraud checks. The karmachari and
+> ward‑officer screens still read seeded data. See **[ARCHITECTURE.md](ARCHITECTURE.md)**
+> and **[GOVERNMENT_INTEGRATION.md](GOVERNMENT_INTEGRATION.md)**.
 
 ---
 
@@ -23,13 +29,23 @@ Meanwhile the waste goes to **Pirana** — roughly 84 acres, open since 1982, 12
 ## How it works
 
 ```
-Document  →  AI verifies  →  Earn credits  →  Redeem for transport
+Set up bins  →  Document handover  →  AI evidence + backend verdict  →  Earn  →  Redeem
 ```
 
-1. **Document** — At handover, photograph your four separated streams: wet, dry, sanitary, special care. GPS and timestamp attach automatically.
-2. **Verify** — AI analyses the photo: are the streams genuinely separated? Is the wet waste clear of plastic? Is sanitary waste wrapped?
-3. **Earn** — An approved handover earns **2 credits**, denominated in leaves.
-4. **Ride** — **20 credits = 1 free ride** on Janmarg BRTS or the Ahmedabad Metro, redeemed through QR ticketing.
+1. **Set up bins** — Say how many separate bins you keep at home. Reaching **2 / 4 / 6**
+   bins pays **5 / 10 / 20** leaves, once each.
+2. **Document** — At handover, select the streams present (at least wet + dry) and take a
+   photo with the in‑app camera. GPS and a capture time attach automatically. There is no
+   gallery upload.
+3. **Verify** — The vision model reports what it sees (per‑stream, screen‑recapture
+   likelihood, quality); the backend runs the fraud checks (one per day, geofence,
+   collection window, cross‑user duplicate, velocity) and decides: **verified /
+   needs a short video / in review / rejected**, with a plain reason and a "what to
+   change" line.
+4. **Earn** — A verified handover pays **1 leaf per confirmed stream (2–4)**. Earned
+   leaves are spendable after a **24‑hour hold**.
+5. **Ride** — **20 leaves = 1 free ride** on Janmarg BRTS or the Ahmedabad Metro; the
+   ticket carries an HMAC‑signed QR.
 
 ### Why a bus ticket and not cash
 
@@ -39,18 +55,28 @@ Document  →  AI verifies  →  Earn credits  →  Redeem for transport
 
 ## Anti-gaming design
 
-A photograph can prove *what* is in the frame. It cannot prove the handover happened. So content and event are verified separately:
+A photograph proves *what* is in the frame, not that the handover happened. Content and
+event are checked separately, and **all of these run server‑side** (`server/fraud.ts`,
+`src/lib/verification/adjudicator.ts`):
 
-| Check | What it prevents |
-|---|---|
-| AI stream analysis | Waste that isn't actually separated |
-| One approved handover per household per day | Farming credits with repeat submissions |
-| Perceptual-hash duplicate detection | Re-submitting an old photo |
-| Geotag within registered area | Photographing a neighbour's bins |
-| Timestamp within the route's collection window | Submitting outside collection hours |
-| Anomaly flagging to the ward officer | Sustained abnormal approval rates |
+| Check | What it prevents | Where |
+|---|---|---|
+| Vision model reports per‑stream visibility / contamination | Credit for streams that aren't in frame | `server/gemini.ts` — evidence only |
+| `recaptureLikelihood` + screen/print heuristics | Photographing a laptop showing an old photo | evidence + hash reuse |
+| One verified handover per household per local day | Farming credits with repeat submissions | partial unique index |
+| 64‑bit dHash compared **across all households** | Re‑submitting an old or a shared photo | `server/phash.ts` + `server/fraud.ts` |
+| Point in the registered geofence (ward bbox interim) | Photographing a neighbour's bins | `app.point_in_geofence` |
+| Capture time inside the collection window | Submitting outside collection hours | `app.in_collection_window` |
+| Velocity / burst over the last 2 hours | One person feeding many households | `server/fraud.ts` |
+| Resident "request a review" on a rejection | A wrong auto‑rejection with no recourse | `POST /api/handovers/:id/dispute` |
 
-Any check failing routes the handover to **Needs review** rather than auto-approving. A human decides only the exceptions.
+The backend reports the **most actionable** reason first (a bad photo before a wrong time),
+with the rest listed as "also". Borderline confidence and conflicting signals route to
+**in review** instead of auto‑approving.
+
+AI cannot catch everything — a high‑quality print or a good phone‑of‑a‑phone shot can pass
+image analysis. Residual risk is bounded by the structural checks (daily cap, geofence,
+cross‑user duplicate), and the rejection copy says so plainly.
 
 ## Roles
 
@@ -64,14 +90,13 @@ The demo build includes a role switcher in the header so the full loop can be sh
 
 ## Tech stack
 
-- **Vite** + **React 18** + **TypeScript**
-- **Tailwind CSS** — palette configured as named tokens
-- **vite-plugin-pwa** — manifest, service worker, offline shell
-- **idb-keyval** — local persistence
-- **react-router-dom**, **lucide-react**
-- **IBM Plex** (Sans / Sans Devanagari / Mono), self-hosted
-
-Installable as a PWA. Works fully offline after first load.
+- **Vite** + **React 19** + **TypeScript**
+- **Express** API (`server/*.ts`, run by `tsx`) — service‑role Supabase, the sole authority
+- **Supabase** — Postgres (RLS on every table, append‑only credit ledger), private Storage
+- **@google/genai** — `gemini-3.6-flash`, evidence‑only vision check
+- **Leaflet** + OpenStreetMap — the location picker (India‑wide, opens on Gujarat)
+- **Tailwind CSS**, **lucide-react**, **IBM Plex** (Sans / Sans Devanagari / Mono), self‑hosted
+- **vite-plugin-pwa** — manifest, service worker (network‑first for `/api`, cache‑first for assets)
 
 ## Getting started
 
@@ -79,39 +104,50 @@ Installable as a PWA. Works fully offline after first load.
 git clone https://github.com/<your-org>/safaiseva.git
 cd safaiseva
 npm install
-npm run dev
+cp .env.example .env      # fill in GEMINI_API_KEY, SUPABASE_* and VITE_SUPABASE_*
+# apply supabase/migrations/*.sql + supabase/seed.sql to your project
+npm run dev               # API + Vite on http://localhost:3000
 ```
-
-Open the printed local URL. For the best experience, use your browser's device toolbar at a 390×844 viewport, or open it on a phone over your local network.
 
 ```bash
-npm run build     # production build
-npm run preview   # serve the build — required to test the service worker and install prompt
+npm test          # adjudicator unit tests
+npm run lint      # tsc --noEmit
+npm run build     # vite build + esbuild bundle of server.ts
 ```
 
-> The install prompt and offline behaviour only work against a production build served over HTTPS or `localhost`. They will not appear in `npm run dev`.
+Best viewed at a ~390px mobile width. The camera flow needs a real camera and a granted
+permission; there is deliberately no file‑upload fallback.
 
-## Demo script (60 seconds)
+## Demo script
 
-1. Open on **Resident** — point out the credit balance and the progress to the next ride.
-2. Tap **Document today's handover**. Tick the four streams, take a photo.
-3. Watch the **AI analysis** — the staged checks and the per-stream readout. Credit lands: **+2**.
-4. Go to **Rewards**, redeem 20 credits, show the generated QR ticket.
-5. Switch to **Karmachari** — show the review queue, and the *Issue credit without app* button for households with no smartphone.
-6. Switch to **Ward Officer** — show ward participation and the anomaly flags.
-7. Tap **Download as an App** in the footer to install it.
+1. **Resident** opens → the bin setup asks how many separate bins you keep. Pick **Four
+   bins** → **+15 leaves** (2‑bin + 4‑bin milestones).
+2. **Document today's handover** → the in‑app camera → select at least wet + dry → run the
+   AI vision check → see the staged checks and the per‑stream readout. Outside 6 AM–12 PM
+   you'll get *"outside your collection hours (6:00 AM – 12:00 PM)"*; a non‑waste photo
+   gets *"the image does not contain identifiable waste"*.
+3. **Rewards** → redeem 20 leaves → the QR ticket modal with the signed token, cost and
+   24 h validity. Balance drops live.
+4. Switch to **Karmachari** / **Ward Officer** to show those views (seeded data).
 
-`Settings → Reset demo` restores the seeded state so the demo can be run again.
+## Current state — what's real and what isn't
 
-## What's faked
+| | State |
+|---|---|
+| Bin onboarding + milestone credits | **real** — Supabase, `POST /api/household/bins` |
+| Handover: camera → Gemini evidence → adjudicator → credit ledger | **real** — server‑authoritative, 24 h hold |
+| Fraud checks (day limit, geofence, window, cross‑user dup, velocity) | **real** — `server/fraud.ts` |
+| Wallet balance + handover history | **real** — `GET /api/wallet` |
+| Ticket redemption + `spend` ledger + HMAC‑signed QR | **real** — no transit gate reads it yet (see G2) |
+| Resident dispute → routes to human review | **real** — `POST /api/handovers/:id/dispute` |
+| Geofence polygon | **ward bounding box** until AMC supplies polygons (G1) |
+| Collection window | placeholder 6 AM–12 PM until real route schedules (G4) |
+| Karmachari review queue, manual issuance | **seeded / local** — needs server roles (G3, I7) |
+| Ward Officer dashboard, leaderboard, anomalies | **seeded fiction** (G7) |
+| Authentication | **off** by design — anonymous per‑device session. Clerk is wired and dormant; flip `VITE_AUTH_ENABLED`. See ARCHITECTURE.md |
+| Offline capture queue | **not built** (P6) |
 
-This is a working prototype built to demonstrate a concept, not a production system. In the interest of not overclaiming:
-
-- **AI verification is simulated.** `src/lib/verification.ts` is a deterministic rule engine with realistic staging, plus the image checks that genuinely run locally (brightness, dimensions, perceptual-hash duplicate detection). It sits behind a clean interface so a real on-device model can replace it without touching the UI.
-- **There is no backend.** All state lives in the browser via IndexedDB. Nothing syncs, nothing is shared between devices.
-- **Demo data is seeded** — three weeks of prior activity, a ward leaderboard, previously redeemed tickets.
-- **Transit redemption is not live.** Tickets are generated locally. Real redemption would need an agreement with Ahmedabad Janmarg Limited; a pilot could sidestep this by buying smart-card credit directly.
-- **There is no authentication.** Households are selected, not logged in.
+`Settings → Reset local demo data` clears this device's cache; it does not touch the server.
 
 ## Project context
 

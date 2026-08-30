@@ -361,6 +361,7 @@ export default function App() {
         handover={selectedHandover}
         isOpen={!!selectedHandover}
         onClose={() => setSelectedHandover(null)}
+        onDisputed={loadData}
       />
 
       {/* Bin setup / onboarding (audit P1) */}
