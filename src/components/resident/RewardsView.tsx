@@ -14,12 +14,15 @@ interface RewardsViewProps {
   onRefreshData: () => Promise<void>;
 }
 
+// `cost` here is the fallback leaf price; the server (wallet.redeem) overrides it when
+// reachable. The catalog is always shown so the section never renders empty if the API is down.
 const CATALOG: {
   type: TransitType;
   title: string;
   route: string;
   icon: React.ElementType;
   description: string;
+  cost: number;
 }[] = [
   {
     type: 'janmarg_brts',
@@ -27,6 +30,7 @@ const CATALOG: {
     route: 'Any Janmarg BRTS corridor, Ahmedabad',
     icon: Bus,
     description: 'One journey on any Janmarg BRTS corridor.',
+    cost: 20,
   },
   {
     type: 'ahmedabad_metro',
@@ -34,6 +38,7 @@ const CATALOG: {
     route: 'GMRC Ahmedabad Metro network',
     icon: Train,
     description: 'Single transit token for the Ahmedabad Metro.',
+    cost: 20,
   },
   {
     type: 'janmarg_day_pass',
@@ -41,6 +46,7 @@ const CATALOG: {
     route: 'All Janmarg BRTS corridors (24h)',
     icon: Ticket,
     description: 'Unlimited 24-hour travel on all Janmarg BRTS buses.',
+    cost: 50,
   },
 ];
 
@@ -54,9 +60,8 @@ export const RewardsView: React.FC<RewardsViewProps> = ({
   const [redeeming, setRedeeming] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const rewardOptions = CATALOG.map((c) => ({ ...c, cost: redeemCosts[c.type] ?? 0 })).filter(
-    (c) => c.cost > 0
-  );
+  // Server price wins when present; otherwise the catalog's own fallback keeps the card visible.
+  const rewardOptions = CATALOG.map((c) => ({ ...c, cost: redeemCosts[c.type] ?? c.cost }));
 
   const handleRedeem = async (opt: (typeof rewardOptions)[0]) => {
     setErrorMessage(null);
