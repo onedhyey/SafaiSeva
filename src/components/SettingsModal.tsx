@@ -44,6 +44,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   if (!isOpen) return null;
 
+  const fmtHour = (h: number) => {
+    const hr12 = h % 12 === 0 ? 12 : h % 12;
+    return `${String(hr12).padStart(2, '0')}:00 ${h < 12 || h === 24 ? 'AM' : 'PM'}`;
+  };
+  const { startHour, endHour } = household.collectionWindow;
+  const collectionWindowLabel = `${fmtHour(startHour)} – ${fmtHour(endHour)}`;
+
   const handleReset = async () => {
     setResetting(true);
     await onResetDemo();
@@ -182,7 +189,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
             <div className="flex items-center justify-between text-zinc-400">
               <span>Collection Route Window</span>
-              <span className="font-mono text-emerald-400 font-medium">06:00 AM – 11:00 AM</span>
+              <span className="font-mono text-emerald-400 font-medium">{collectionWindowLabel}</span>
             </div>
           </div>
 

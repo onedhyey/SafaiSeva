@@ -200,6 +200,8 @@ export default function App() {
   const activeHousehold: HouseholdProfile = {
     ...household,
     name: user?.fullName || household.name,
+    // Rides taken = transit tickets that have been redeemed and boarded.
+    ridesTaken: tickets.filter((t) => t.status === 'used').length,
   };
 
   const activeRole: Role = selectedRole || 'resident';
@@ -221,9 +223,10 @@ export default function App() {
   const inApp = gateScreen === null;
 
   return (
-    <div className="min-h-screen bg-ink text-tint flex flex-col items-center justify-start antialiased">
-      {/* 390px Mobile Viewport Container */}
-      <div className="w-full max-w-md min-h-screen flex flex-col bg-ink relative border-x border-ink-soft/40 shadow-2xl">
+    <div className="demo-stage min-h-screen bg-ink text-tint flex flex-col items-center justify-start lg:justify-center antialiased">
+      {/* Mobile viewport container. On wide screens it becomes a device on a stage
+          (see .demo-frame in index.css) so the demo reads as a real phone product. */}
+      <div className="demo-frame w-full max-w-md min-h-screen lg:min-h-0 lg:h-[860px] lg:max-h-[88vh] flex flex-col bg-ink relative border-x border-ink-soft/40 shadow-2xl lg:overflow-hidden">
         {/* Persistent Top Header with Auth & Role state */}
         <RoleSwitcher
           currentRole={selectedRole}

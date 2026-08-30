@@ -18,7 +18,21 @@ export const ImpactView: React.FC<ImpactViewProps> = ({
     (h) => h.householdId === household.id && h.status === 'verified'
   ).length;
 
-  const totalCreditsEarned = verifiedCount * 2;
+  // ~22.8 kg is the AMC per-handover diversion estimate for a 4-person household.
+  const kgDiverted = verifiedCount > 0 ? (verifiedCount * 22.8).toFixed(1) : household.totalKgDiverted;
+
+  const participationDelta = (
+    wardStats.participationRateThisWeek - wardStats.participationRateLastWeek
+  ).toFixed(1);
+
+  // Drop the live wallet balance into this household's leaderboard row, then re-sort so
+  // the ranking stays honest as credits are earned or spent during the demo.
+  const leaderboard = wardStats.leaderboard
+    .map((row) =>
+      row.householdCode === household.id ? { ...row, credits: household.balance } : row
+    )
+    .sort((a, b) => b.credits - a.credits)
+    .map((row, i) => ({ ...row, rank: i + 1 }));
 
   return (
     <div className="space-y-5 pb-20 pt-1 text-left select-none">
@@ -39,7 +53,7 @@ export const ImpactView: React.FC<ImpactViewProps> = ({
             </span>
           </div>
           <div className="font-mono text-2xl font-bold text-white tabular-nums">
-            {household.totalKgDiverted} <span className="text-xs font-normal text-muted-l">kg</span>
+            {kgDiverted} <span className="text-xs font-normal text-muted-l">kg</span>
           </div>
           <p className="text-[10px] text-muted-l leading-tight">
             Kept out of Pirana dumpsite through clean segregation
@@ -67,14 +81,14 @@ export const ImpactView: React.FC<ImpactViewProps> = ({
           <div className="flex items-center gap-1.5 text-green">
             <LeafGlyph size={14} color="#19A85B" />
             <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-l">
-              Earned
+              Leaf balance
             </span>
           </div>
           <div className="font-mono text-2xl font-bold text-white tabular-nums">
-            {totalCreditsEarned} <span className="text-xs font-normal text-muted-l">leaves</span>
+            {household.balance} <span className="text-xs font-normal text-muted-l">leaves</span>
           </div>
           <p className="text-[10px] text-muted-l leading-tight">
-            Accumulated for Janmarg and Metro transit fares
+            Spendable on Janmarg and Metro transit fares
           </p>
         </div>
 
@@ -116,7 +130,7 @@ export const ImpactView: React.FC<ImpactViewProps> = ({
           <span>Target: 75% for Ward Clean Bonus</span>
           <span className="text-green flex items-center gap-1">
             <TrendingUp size={12} />
-            <span>+6.3% vs last week</span>
+            <span>+{participationDelta}% vs last week</span>
           </span>
         </div>
       </div>
@@ -134,7 +148,7 @@ export const ImpactView: React.FC<ImpactViewProps> = ({
         </div>
 
         <div className="bg-ink-soft border border-muted/20 rounded-lg divide-y divide-muted/15 overflow-hidden">
-          {wardStats.leaderboard.map((item) => {
+          {leaderboard.map((item) => {
             const isUser = item.householdCode === household.id;
 
             return (

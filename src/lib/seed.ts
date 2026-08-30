@@ -71,11 +71,11 @@ export function initialSeedData(): {
       startHour: 6,
       endHour: 12,
     },
-    balance: 14, // 14 leaves, 6 away from 20 (free ride)
+    balance: 23, // fallback only — the wallet API is the source of truth
     streakDays: 9,
-    totalKgDiverted: 68.4,
-    ridesTaken: 4,
-    lastHandoverDate: '2026-08-25',
+    totalKgDiverted: 68.4, // fallback only — ImpactView derives this from verified handovers
+    ridesTaken: 0, // fallback only — App overrides with the live used-ticket count
+    lastHandoverDate: '2026-08-29',
   };
 
   // Generate 21 past handovers (3 weeks)
@@ -319,14 +319,17 @@ export function initialSeedData(): {
       inReview: 10.2,
       rejected: 5.2,
     },
+    // Ordered by credits, descending. ImpactView splices the live wallet balance into
+    // the "you" row (HH-NV-0482) and re-sorts, so this household's number here is only
+    // a fallback for when the wallet API is unreachable.
     leaderboard: [
       { rank: 1, householdCode: 'HH-NV-0112', society: 'Shivalik Heights, CG Road', streak: 28, credits: 56 },
       { rank: 2, householdCode: 'HH-NV-0892', society: 'Prerna Vihar, Mithakhali', streak: 26, credits: 52 },
       { rank: 3, householdCode: 'HH-NV-0341', society: 'Goyal Terraces, Stadium Rd', streak: 21, credits: 42 },
-      { rank: 4, householdCode: 'HH-NV-0482', society: 'Shivam Apts, Navrangpura (You)', streak: 9, credits: 14 },
-      { rank: 5, householdCode: 'HH-NV-0921', society: 'Swastik Enclave, CG Road', streak: 8, credits: 16 },
-      { rank: 6, householdCode: 'HH-NV-0238', society: 'Arunodaya Society, Alkapuri', streak: 7, credits: 14 },
-      { rank: 7, householdCode: 'HH-NV-0519', society: 'Panchamrut Flats, Stadium', streak: 6, credits: 12 },
+      { rank: 4, householdCode: 'HH-NV-0921', society: 'Swastik Enclave, CG Road', streak: 12, credits: 31 },
+      { rank: 5, householdCode: 'HH-NV-0482', society: 'Shivam Apts, Navrangpura', streak: 9, credits: 23 },
+      { rank: 6, householdCode: 'HH-NV-0238', society: 'Arunodaya Society, Alkapuri', streak: 8, credits: 19 },
+      { rank: 7, householdCode: 'HH-NV-0519', society: 'Panchamrut Flats, Stadium', streak: 6, credits: 14 },
       { rank: 8, householdCode: 'HH-NV-0740', society: 'Vandana Apts, Mithakhali', streak: 5, credits: 10 },
     ],
     subDistricts: [

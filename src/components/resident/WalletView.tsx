@@ -163,6 +163,15 @@ export const WalletView: React.FC<WalletViewProps> = ({
               const isInReview = h.status === 'in_review';
               const isRejected = h.status === 'rejected';
 
+              const streamCount = h.streamsConfirmed
+                ? Object.values(h.streamsConfirmed).filter(Boolean).length
+                : 0;
+              const subtitle = isInReview
+                ? 'Queued for spot-check'
+                : isRejected
+                ? h.verification?.decisionReason || 'Not separated at source'
+                : `${streamCount || 2} stream${streamCount === 1 ? '' : 's'} verified`;
+
               return (
                 <div
                   key={h.id}
@@ -196,9 +205,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
                             })}
                       </div>
                       <div className="text-[11px] text-muted-l truncate max-w-[190px]">
-                        {isVerified && '4 streams segregated'}
-                        {isInReview && 'Queued for spot-check'}
-                        {isRejected && 'Non-compliant separation'}
+                        {subtitle}
                       </div>
                     </div>
                   </div>
