@@ -33,6 +33,7 @@ import { HandoverDetailModal } from './components/HandoverDetailModal';
 import { LoginView } from './components/auth/LoginView';
 import { RoleSelectionModal } from './components/auth/RoleSelectionModal';
 import { WalletView } from './components/resident/WalletView';
+import { HouseholdSetupView } from './components/resident/HouseholdSetupView';
 import { DocumentView } from './components/resident/DocumentView';
 import { RewardsView } from './components/resident/RewardsView';
 import { ImpactView } from './components/resident/ImpactView';
@@ -65,6 +66,9 @@ export default function App() {
   // Bin onboarding (audit P1)
   const [bins, setBins] = useState<BinsInfo | null>(null);
   const [binModalOpen, setBinModalOpen] = useState<boolean>(false);
+
+  // Auth-on path: a signed-in resident with no household yet must create or join one.
+  const [needsHousehold, setNeedsHousehold] = useState<boolean>(false);
 
   // Server-backed reward costs (fallback to nothing until the wallet call returns)
   const [redeemCosts, setRedeemCosts] = useState<Record<string, number>>({});
@@ -108,6 +112,7 @@ export default function App() {
       try {
         const wallet = await getWallet();
         if (wallet.householdCode) {
+          setNeedsHousehold(false);
           mergedHousehold = {
             ...hh,
             balance: wallet.balance,
@@ -125,6 +130,9 @@ export default function App() {
           setBins(wallet.bins ?? null);
           setRedeemCosts(wallet.redeem ?? {});
           if (wallet.bins && !wallet.bins.onboarded) setBinModalOpen(true);
+        } else if (authEnabled) {
+          // Signed in, but not linked to a household yet — show the create/join step.
+          setNeedsHousehold(true);
         }
       } catch (e) {
         console.warn('Wallet API unavailable — showing local state only.', e);
@@ -255,7 +263,16 @@ export default function App() {
             /* In the app: role-specific screens */
             <>
               {/* RESIDENT VIEWS */}
-              {activeRole === 'resident' && (
+              {activeRole === 'resident' && needsHousehold && (
+                <HouseholdSetupView
+                  onLinked={async () => {
+                    setNeedsHousehold(false);
+                    await loadData();
+                  }}
+                />
+              )}
+
+              {activeRole === 'resident' && !needsHousehold && (
                 <>
                   {residentTab === 'wallet' && (
                     <WalletView
@@ -315,12 +332,12 @@ export default function App() {
         </main>
 
         {/* PWA Install Control Footer (Website only, hidden automatically once installed as standalone app) */}
-        <div className={inApp && activeRole === 'resident' ? 'mb-14' : ''}>
+        <div className={inApp && activeRole === 'resident' && !needsHousehold ? 'mb-14' : ''}>
           <InstallAppFooter />
         </div>
 
         {/* Resident Bottom Nav */}
-        {inApp && activeRole === 'resident' && (
+        {inApp && activeRole === 'resident' && !needsHousehold && (
           <BottomNav
             currentTab={residentTab}
             onTabChange={(tab) => setResidentTab(tab)}

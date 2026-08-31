@@ -2,7 +2,7 @@
 // header; when auth is enabled later, a Clerk bearer token is added alongside it and the
 // server prefers that (see server/principal.ts).
 
-import { getDeviceId } from './authContext';
+import { getDeviceId, getAuthToken } from './authContext';
 
 export interface BinsInfo {
   count: number;
@@ -105,11 +105,15 @@ export const DEMO_WORKER_CODE = 'AMC-WZ-109';
 
 async function apiFetch<T>(path: string, init: RequestInit & { asWorker?: boolean } = {}): Promise<T> {
   const { asWorker, ...rest } = init;
+  // When auth is on, the Clerk session token is present and the server prefers it;
+  // the device id is still sent so an anonymous session can be claimed on first sign-in.
+  const token = await getAuthToken();
   const res = await fetch(path, {
     ...rest,
     headers: {
       'Content-Type': 'application/json',
       'x-device-id': getDeviceId(),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(asWorker ? { 'x-demo-worker': DEMO_WORKER_CODE } : {}),
       ...(init.headers || {}),
     },
@@ -156,6 +160,31 @@ export function redeemTicket(transitType: string): Promise<RedeemResponse> {
   return apiFetch<RedeemResponse>('/api/tickets/redeem', {
     method: 'POST',
     body: JSON.stringify({ transitType }),
+  });
+}
+
+// ---- Household onboarding (auth-on path) ----
+export interface CreateHouseholdResponse {
+  code: string;
+  joinCode: string;
+  nearbyExisting?: string | null;
+}
+
+export function createHousehold(payload: {
+  address?: string;
+  lat?: number;
+  lng?: number;
+}): Promise<CreateHouseholdResponse> {
+  return apiFetch<CreateHouseholdResponse>('/api/household/create', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function joinHousehold(code: string): Promise<{ code: string }> {
+  return apiFetch<{ code: string }>('/api/household/join', {
+    method: 'POST',
+    body: JSON.stringify({ code: code.trim() }),
   });
 }
 
