@@ -9,6 +9,7 @@
 // resolveClerk(), flip VITE_AUTH_ENABLED. No table or query changes.
 
 import type { Request } from 'express';
+import { verifyToken, createClerkClient, type ClerkClient } from '@clerk/backend';
 import { admin } from './supabaseAdmin.ts';
 import { env } from './env.ts';
 
@@ -67,11 +68,131 @@ async function getOrCreateDeviceUser(deviceId: string): Promise<string> {
   return userId;
 }
 
-async function resolveClerk(_token: string): Promise<string> {
-  // TODO(auth-on): `import { verifyToken } from '@clerk/backend'`, verify with
-  // env.clerkSecretKey, read `sub`, then get-or-create users by clerk_user_id
-  // (linking an existing device_id row when the header is also present).
-  throw new Error('Clerk verification not wired yet (VITE_AUTH_ENABLED is expected to be false).');
+// ---------------------------------------------------------------------------------------
+// Clerk (auth ON). verifyToken() is networkless after the first JWKS fetch, so this adds
+// no per-request round trip. A minimal session token only carries `sub`; name/email are
+// pulled from the Backend API once, on first provisioning.
+// ---------------------------------------------------------------------------------------
+let _clerk: ClerkClient | null = null;
+function clerk(): ClerkClient {
+  if (!_clerk) {
+    if (!env.clerkSecretKey) throw new Error('CLERK_SECRET_KEY is missing while auth is enabled.');
+    _clerk = createClerkClient({ secretKey: env.clerkSecretKey });
+  }
+  return _clerk;
+}
+
+interface ClerkClaims {
+  sub: string;
+  email?: string;
+  name?: string;
+}
+
+async function verifyClerkToken(token: string): Promise<ClerkClaims> {
+  if (!env.clerkSecretKey) {
+    const e: any = new Error('Auth is enabled but CLERK_SECRET_KEY is not set on the server.');
+    e.status = 500;
+    throw e;
+  }
+  try {
+    const payload = (await verifyToken(token, {
+      secretKey: env.clerkSecretKey,
+      clockSkewInMs: 10_000,
+      ...(env.clerkAuthorizedParties.length
+        ? { authorizedParties: env.clerkAuthorizedParties }
+        : {}),
+    })) as Record<string, any>;
+    if (!payload?.sub) {
+      const e: any = new Error('Session token has no subject.');
+      e.status = 401;
+      throw e;
+    }
+    return {
+      sub: String(payload.sub),
+      email: payload.email || payload.email_address || undefined,
+      name: payload.name || payload.full_name || undefined,
+    };
+  } catch (err: any) {
+    if (err?.status === 401 || err?.status === 500) throw err;
+    const e: any = new Error('Invalid or expired session token.');
+    e.status = 401;
+    throw e;
+  }
+}
+
+function displayName(c: ClerkClaims): string {
+  return (c.name || c.email || 'Resident').trim() || 'Resident';
+}
+
+async function getOrCreateClerkUser(claims: ClerkClaims, deviceId: string | null): Promise<string> {
+  const db = admin();
+
+  // 1. Already provisioned.
+  const { data: existing } = await db
+    .from('users')
+    .select('id')
+    .eq('clerk_user_id', claims.sub)
+    .maybeSingle();
+  if (existing?.id) return existing.id as string;
+
+  // 2. First authenticated call from a browser that was an anonymous device session:
+  //    claim that users row (and its household / history) instead of forking a new one.
+  if (deviceId) {
+    const { data: deviceUser } = await db
+      .from('users')
+      .select('id, clerk_user_id')
+      .eq('device_id', deviceId)
+      .maybeSingle();
+    if (deviceUser?.id && !deviceUser.clerk_user_id) {
+      const { data: linked, error } = await db
+        .from('users')
+        .update({ clerk_user_id: claims.sub, display_name: displayName(claims) })
+        .eq('id', deviceUser.id)
+        .select('id')
+        .single();
+      if (!error && linked?.id) return linked.id as string;
+    }
+  }
+
+  // 3. Fresh user. Backfill a real name from the Backend API if the token was minimal.
+  let name = displayName(claims);
+  if (name === 'Resident') {
+    try {
+      const u = await clerk().users.getUser(claims.sub);
+      name =
+        [u.firstName, u.lastName].filter(Boolean).join(' ') ||
+        u.username ||
+        u.primaryEmailAddress?.emailAddress ||
+        'Resident';
+    } catch {
+      /* keep default */
+    }
+  }
+
+  const { data, error } = await db
+    .from('users')
+    .insert({ clerk_user_id: claims.sub, display_name: name })
+    .select('id')
+    .single();
+  if (error) {
+    // Lost a create race — the row exists now.
+    const { data: again } = await db
+      .from('users')
+      .select('id')
+      .eq('clerk_user_id', claims.sub)
+      .maybeSingle();
+    if (again?.id) return again.id as string;
+    throw new Error(`provision clerk user failed: ${error.message}`);
+  }
+  return data.id as string;
+}
+
+async function resolveClerk(token: string, req: Request): Promise<{ userId: string; sub: string }> {
+  const claims = await verifyClerkToken(token);
+  const raw = (req.header('x-device-id') || '').trim();
+  const deviceId = raw.length >= 6 ? raw : null;
+  const userId = await getOrCreateClerkUser(claims, deviceId);
+  return { userId, sub: claims.sub };
 }
 
 export async function resolvePrincipal(req: Request): Promise<Principal> {
@@ -83,8 +204,8 @@ export async function resolvePrincipal(req: Request): Promise<Principal> {
       err.status = 401;
       throw err;
     }
-    const userId = await resolveClerk(token);
-    return { userId, clerkSub: 'pending', mode: 'clerk' };
+    const { userId, sub } = await resolveClerk(token, req);
+    return { userId, clerkSub: sub, mode: 'clerk' };
   }
 
   const deviceId = (req.header('x-device-id') || '').trim();

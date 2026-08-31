@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { ClerkProvider, useUser, useClerk } from '@clerk/clerk-react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { ClerkProvider, useUser, useClerk, useAuth as useClerkAuth } from '@clerk/clerk-react';
 import { Role } from '../types';
 
 /**
@@ -76,6 +76,25 @@ export function getDeviceId(): string {
   return getOrCreateDeviceId();
 }
 
+/**
+ * Bearer-token bridge for the non-React API client (src/lib/api.ts). The active auth
+ * provider registers a getter; everywhere else it stays null and requests fall back to
+ * the anonymous `x-device-id` header exactly as before.
+ */
+let _authTokenGetter: () => Promise<string | null> = async () => null;
+
+export function setAuthTokenGetter(fn: () => Promise<string | null>): void {
+  _authTokenGetter = fn;
+}
+
+export async function getAuthToken(): Promise<string | null> {
+  try {
+    return await _authTokenGetter();
+  } catch {
+    return null;
+  }
+}
+
 // -------------------------------------------------------------------------------------
 // Provider: open demo session (no auth). Used when VITE_AUTH_ENABLED is not "true".
 // -------------------------------------------------------------------------------------
@@ -125,6 +144,13 @@ const ClerkAuthBridge: React.FC<{
 }> = ({ children, selectedRole, setSelectedRole }) => {
   const { user: clerkUser, isSignedIn: clerkIsSignedIn } = useUser();
   const { signOut: clerkSignOut, openSignIn } = useClerk();
+  const { getToken } = useClerkAuth();
+
+  // Feed the API client the live Clerk session token.
+  useEffect(() => {
+    setAuthTokenGetter(() => getToken());
+    return () => setAuthTokenGetter(async () => null);
+  }, [getToken]);
 
   const user: AuthUser | null = clerkUser
     ? {

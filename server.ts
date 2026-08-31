@@ -6,7 +6,7 @@ import { env, supabaseConfigured, geminiConfigured } from "./server/env.ts";
 import { mountApiRoutes } from "./server/routes.ts";
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 // Evidence photos/short videos arrive as base64 in the JSON body.
 // TODO(B2): move to signed direct-to-storage uploads and drop this limit.

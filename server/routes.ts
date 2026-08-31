@@ -743,4 +743,129 @@ export function mountApiRoutes(app: Express) {
       return fail(res, e.status ?? 500, e.message ?? 'issue error');
     }
   });
+
+  // ---------------------------------------------------------------------------------
+  // Household onboarding for the auth-on path. A signed-in resident with no household
+  // either creates one (and gets a code to share with family) or joins an existing one
+  // by code. Everyone on one household shares its balance + the per-household daily
+  // limits, so extra family accounts cannot multiply credits.
+  //   POST /api/household/create  { address?, lat?, lng? }  -> { code, joinCode, nearbyExisting? }
+  //   POST /api/household/join    { code }                  -> { code }
+  // ---------------------------------------------------------------------------------
+  app.post('/api/household/create', async (req: Request, res: Response) => {
+    try {
+      const principal = await resolvePrincipal(req);
+      if (await householdForUser(principal.userId)) {
+        return fail(res, 409, 'This account is already linked to a household.');
+      }
+      const db = admin();
+
+      const { data: ward } = await db
+        .from('wards')
+        .select('id')
+        .eq('code', 'W12-NAVRANGPURA')
+        .maybeSingle();
+      if (!ward?.id) return fail(res, 500, 'No ward reference is configured.');
+
+      const lat = typeof req.body?.lat === 'number' ? req.body.lat : null;
+      const lng = typeof req.body?.lng === 'number' ? req.body.lng : null;
+      const address = String(req.body?.address || '').trim().slice(0, 240) || 'Address pending';
+
+      // Non-blocking: is there already a household within ~25 m of this fix?
+      let nearbyExisting: string | null = null;
+      if (lat != null && lng != null) {
+        const { data: rows } = await db
+          .from('households')
+          .select('code, latitude, longitude')
+          .not('latitude', 'is', null)
+          .limit(1000);
+        for (const r of rows ?? []) {
+          if (r.latitude == null || r.longitude == null) continue;
+          if (haversineMeters(lat, lng, r.latitude, r.longitude) <= 25) {
+            nearbyExisting = r.code as string;
+            break;
+          }
+        }
+      }
+
+      let code = genHouseholdCode();
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const { data, error } = await db
+          .from('households')
+          .insert({
+            code,
+            address,
+            ward_id: ward.id,
+            latitude: lat,
+            longitude: lng,
+            bin_count: 1,
+            bin_target: 6,
+          })
+          .select('id, code')
+          .single();
+        if (!error && data) {
+          const { error: memErr } = await db
+            .from('household_members')
+            .insert({ household_id: data.id, user_id: principal.userId, member_role: 'owner' });
+          if (memErr) return fail(res, 500, memErr.message);
+          return res.json({ code: data.code, joinCode: data.code, nearbyExisting });
+        }
+        if (error && /duplicate key|unique/i.test(error.message)) {
+          code = genHouseholdCode();
+          continue;
+        }
+        return fail(res, 500, error?.message || 'Could not create household.');
+      }
+      return fail(res, 500, 'Could not allocate a household code — try again.');
+    } catch (e: any) {
+      return fail(res, e.status ?? 500, e.message ?? 'create error');
+    }
+  });
+
+  app.post('/api/household/join', async (req: Request, res: Response) => {
+    try {
+      const principal = await resolvePrincipal(req);
+      if (await householdForUser(principal.userId)) {
+        return fail(res, 409, 'This account is already linked to a household.');
+      }
+      const code = String(req.body?.code || '').trim();
+      if (!code) return fail(res, 400, 'A household code is required.');
+
+      const db = admin();
+      const { data: hh } = await db
+        .from('households')
+        .select('id, code')
+        .eq('code', code)
+        .maybeSingle();
+      if (!hh?.id) return fail(res, 404, `No household found for code ${code}.`);
+
+      const { error } = await db
+        .from('household_members')
+        .insert({ household_id: hh.id, user_id: principal.userId, member_role: 'member' });
+      if (error && !/duplicate key/i.test(error.message)) return fail(res, 500, error.message);
+
+      return res.json({ code: hh.code });
+    } catch (e: any) {
+      return fail(res, e.status ?? 500, e.message ?? 'join error');
+    }
+  });
+}
+
+// Unambiguous 6-char code (no I/O/0/1/L) -> HH-U-XXXXXX
+function genHouseholdCode(): string {
+  const A = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  let s = '';
+  for (let i = 0; i < 6; i++) s += A[Math.floor(Math.random() * A.length)];
+  return `HH-U-${s}`;
+}
+
+function haversineMeters(la1: number, lo1: number, la2: number, lo2: number): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(la2 - la1);
+  const dLon = toRad(lo2 - lo1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(la1)) * Math.cos(toRad(la2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }

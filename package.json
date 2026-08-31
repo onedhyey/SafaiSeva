@@ -12,9 +12,12 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx tests/adjudicator.test.mjs"
+    "test": "tsx tests/adjudicator.test.mjs",
+    "test:auth": "npm run build && node scripts/auth-smoke.mjs",
+    "link-worker": "node scripts/link-worker.mjs"
   },
   "dependencies": {
+    "@clerk/backend": "^3.16.13",
     "@clerk/clerk-react": "^5.61.3",
     "@clerk/themes": "^2.4.57",
     "@google/genai": "^2.4.0",

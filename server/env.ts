@@ -25,6 +25,12 @@ export const env = {
 
   authEnabled: String(pick('VITE_AUTH_ENABLED') ?? '').toLowerCase() === 'true',
   clerkSecretKey: pick('CLERK_SECRET_KEY'),
+  // Optional hardening: comma-separated list of origins allowed to mint the session
+  // tokens we accept (defaults to APP_URL when set). Leave unset to skip the check.
+  clerkAuthorizedParties: (pick('CLERK_AUTHORIZED_PARTIES', 'APP_URL') ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
 
   appUrl: pick('APP_URL'),
   qrSigningSecret: pick('QR_SIGNING_SECRET'),
