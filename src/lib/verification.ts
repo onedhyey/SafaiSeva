@@ -11,7 +11,13 @@ import {
   HouseholdProfile,
   StreamAnalysisItem,
 } from '../types';
-import { verifyHandover, VerifyRequest, VerifyResponse } from './api';
+import {
+  verifyHandover,
+  uploadEvidenceBlob,
+  dataUrlToBlob,
+  VerifyRequest,
+  VerifyResponse,
+} from './api';
 
 export interface VerificationOptions {
   photo: string;
@@ -22,7 +28,8 @@ export interface VerificationOptions {
 }
 
 export interface VideoVerificationOptions {
-  video: string;
+  /** The recorded clip. Uploaded to Storage; only its key is sent to the server. */
+  videoBlob?: Blob | null;
   videoFrames?: string[];
   streams: StreamChecklist;
   location: LocationData;
@@ -164,18 +171,18 @@ export async function analyse(options: VerificationOptions): Promise<Verificatio
     };
   }
 
-  const payload: VerifyRequest = {
-    declaredStreams,
-    attempt: 1,
-    photo: options.photo,
-    clientCapturedAt: (options.timestamp ?? new Date()).toISOString(),
-    clientLat: options.location?.lat ?? null,
-    clientLng: options.location?.lng ?? null,
-    clientAccuracyM: options.location?.accuracyMeters ?? null,
-    idempotencyKey: `att1-${options.household.id}-${(options.timestamp ?? new Date()).getTime()}`,
-  };
-
   try {
+    const photoKey = await uploadEvidenceBlob('photo', dataUrlToBlob(options.photo));
+    const payload: VerifyRequest = {
+      declaredStreams,
+      attempt: 1,
+      photoKey,
+      clientCapturedAt: (options.timestamp ?? new Date()).toISOString(),
+      clientLat: options.location?.lat ?? null,
+      clientLng: options.location?.lng ?? null,
+      clientAccuracyM: options.location?.accuracyMeters ?? null,
+      idempotencyKey: `att1-${options.household.id}-${(options.timestamp ?? new Date()).getTime()}`,
+    };
     return toResult(await verifyHandover(payload), 'photo');
   } catch (err: any) {
     console.error('Photo verification error:', err);
@@ -185,20 +192,24 @@ export async function analyse(options: VerificationOptions): Promise<Verificatio
 
 export async function analyseVideo(options: VideoVerificationOptions): Promise<VerificationResult> {
   const declaredStreams = checklistToArray(options.streams);
-  const payload: VerifyRequest = {
-    declaredStreams,
-    attempt: 2,
-    handoverId: options.handoverId,
-    video: options.video || undefined,
-    videoFrames: options.videoFrames,
-    clientCapturedAt: (options.timestamp ?? new Date()).toISOString(),
-    clientLat: options.location?.lat ?? null,
-    clientLng: options.location?.lng ?? null,
-    clientAccuracyM: options.location?.accuracyMeters ?? null,
-    idempotencyKey: `att2-${options.household.id}-${(options.timestamp ?? new Date()).getTime()}`,
-  };
 
   try {
+    // Upload the clip if MediaRecorder produced one; a frames-only fallback goes inline.
+    const videoKey = options.videoBlob
+      ? await uploadEvidenceBlob('video', options.videoBlob)
+      : undefined;
+    const payload: VerifyRequest = {
+      declaredStreams,
+      attempt: 2,
+      handoverId: options.handoverId,
+      videoKey,
+      videoFrames: options.videoFrames,
+      clientCapturedAt: (options.timestamp ?? new Date()).toISOString(),
+      clientLat: options.location?.lat ?? null,
+      clientLng: options.location?.lng ?? null,
+      clientAccuracyM: options.location?.accuracyMeters ?? null,
+      idempotencyKey: `att2-${options.household.id}-${(options.timestamp ?? new Date()).getTime()}`,
+    };
     return toResult(await verifyHandover(payload), 'video');
   } catch (err: any) {
     console.error('Video verification error:', err);

@@ -65,8 +65,10 @@ export interface VerifyRequest {
   declaredStreams: string[];
   attempt: 1 | 2;
   handoverId?: string;
-  photo?: string;
-  video?: string;
+  // Objects PUT straight to Storage via /api/uploads/sign (audit B2). videoFrames are
+  // small derived thumbnails and are still sent inline.
+  photoKey?: string;
+  videoKey?: string;
   videoFrames?: string[];
   clientCapturedAt?: string;
   clientLat?: number | null;
@@ -140,6 +142,51 @@ export function verifyHandover(payload: VerifyRequest): Promise<VerifyResponse> 
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+// ---- Evidence upload: signed direct-to-Storage (audit B2) ----
+export interface UploadUrlResponse {
+  key: string;
+  uploadUrl: string;
+  token: string;
+}
+
+export function getUploadUrl(
+  kind: 'photo' | 'video' | 'keyframe',
+  contentType: string
+): Promise<UploadUrlResponse> {
+  return apiFetch<UploadUrlResponse>('/api/uploads/sign', {
+    method: 'POST',
+    body: JSON.stringify({ kind, contentType }),
+  });
+}
+
+export function dataUrlToBlob(dataUrl: string): Blob {
+  const comma = dataUrl.indexOf(',');
+  const mime = dataUrl.slice(5, dataUrl.indexOf(';')) || 'image/jpeg';
+  const bin = atob(dataUrl.slice(comma + 1));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
+// Get a signed URL, PUT the captured file straight to Supabase Storage, return the object
+// key to hand to /api/handovers/verify. The bytes never touch our JSON body.
+export async function uploadEvidenceBlob(
+  kind: 'photo' | 'video' | 'keyframe',
+  blob: Blob
+): Promise<string> {
+  const contentType = blob.type || (kind === 'video' ? 'video/webm' : 'image/jpeg');
+  const { key, uploadUrl } = await getUploadUrl(kind, contentType);
+  const put = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { 'content-type': contentType, 'x-upsert': 'true' },
+    body: blob,
+  });
+  if (!put.ok) {
+    throw new Error(`Evidence upload failed (${put.status})`);
+  }
+  return key;
 }
 
 export function disputeHandover(id: string, note: string): Promise<{ status: string; reasonText: string }> {
