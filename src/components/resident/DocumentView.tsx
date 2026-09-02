@@ -491,7 +491,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
 
     try {
       const result = await analyseVideo({
-        video: recordedVideoBase64,
+        videoBlob: recordedVideoBlob,
         videoFrames: videoKeyframes,
         streams,
         location,

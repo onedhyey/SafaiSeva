@@ -8,10 +8,11 @@ import { mountApiRoutes } from "./server/routes.ts";
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
-// Evidence photos/short videos arrive as base64 in the JSON body.
-// TODO(B2): move to signed direct-to-storage uploads and drop this limit.
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+// Evidence photos/videos are uploaded straight to Storage via a signed URL (audit B2);
+// the JSON body now only carries object keys + small derived video keyframes, so a tight
+// limit is both safe and a DoS backstop on the unauthenticated surface.
+app.use(express.json({ limit: "2mb" }));
+app.use(express.urlencoded({ extended: true, limit: "2mb" }));
 
 // ---------------------------------------------------------------------------------------
 // Health

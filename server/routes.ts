@@ -8,7 +8,12 @@ import { resolvePrincipal, resolveWorker } from './principal.ts';
 import { dHash, sha256, decodeDataUrl } from './phash.ts';
 import { extractFromPhoto, extractFromVideo } from './gemini.ts';
 import { runFraudChecks, istDate, workerCapExceeded } from './fraud.ts';
-import { uploadEvidence } from './storage.ts';
+import {
+  uploadEvidence,
+  createEvidenceUploadUrl,
+  fetchEvidence,
+  isOwnedEvidenceKey,
+} from './storage.ts';
 import { signTicket } from './qrToken.ts';
 import { adjudicate } from '../src/lib/verification/adjudicator.ts';
 import { FALLBACK_RULES, RewardRules, WasteStream, ALL_STREAMS } from '../src/lib/verification/contract.ts';
@@ -192,10 +197,36 @@ export function mountApiRoutes(app: Express) {
   });
 
   // ---------------------------------------------------------------------------------
+  // POST /api/uploads/sign — mint a short-lived direct-to-Storage upload URL (audit B2).
+  //   body: { kind: 'photo' | 'video' | 'keyframe', contentType }
+  //   -> { key, uploadUrl, token }
+  // The client PUTs the captured file straight to the private 'evidence' bucket and then
+  // sends only `key` to /api/handovers/verify. Authenticated so it is not an open DoS
+  // surface; the bucket's 25 MB object cap and the 2 h token expiry bound abuse further.
+  // ---------------------------------------------------------------------------------
+  app.post('/api/uploads/sign', async (req: Request, res: Response) => {
+    try {
+      const principal = await resolvePrincipal(req);
+      const kind = String(req.body?.kind ?? '');
+      const contentType = String(req.body?.contentType ?? '');
+      if (!['photo', 'video', 'keyframe'].includes(kind)) {
+        return fail(res, 400, 'Unknown upload kind.');
+      }
+      const signed = await createEvidenceUploadUrl(principal.userId, contentType);
+      if (!signed) return fail(res, 415, `Unsupported media type: ${contentType || 'none'}.`);
+      return res.json(signed);
+    } catch (e: any) {
+      return fail(res, e.status ?? 500, e.message ?? 'sign error');
+    }
+  });
+
+  // ---------------------------------------------------------------------------------
   // POST /api/handovers/verify — the whole pipeline for one attempt
-  //   body: { declaredStreams, attempt, handoverId?, photo?, video?, videoFrames?,
+  //   body: { declaredStreams, attempt, handoverId?, photoKey?, videoKey?, videoFrames?,
   //           clientCapturedAt?, clientLat?, clientLng?, clientAccuracyM?,
   //           attestationNonce?, idempotencyKey? }
+  // photoKey / videoKey reference objects the client already PUT to Storage via
+  // /api/uploads/sign. videoFrames are small derived thumbnails and stay inline.
   // ---------------------------------------------------------------------------------
   app.post('/api/handovers/verify', async (req: Request, res: Response) => {
     try {
@@ -207,19 +238,27 @@ export function mountApiRoutes(app: Express) {
       const body = req.body ?? {};
       const declaredStreams = cleanStreams(body.declaredStreams);
       const attempt: 1 | 2 = body.attempt === 2 ? 2 : 1;
-      const photo: string | undefined = body.photo;
-      const video: string | undefined = body.video;
+      const photoKey: string | undefined = typeof body.photoKey === 'string' ? body.photoKey : undefined;
+      const videoKey: string | undefined = typeof body.videoKey === 'string' ? body.videoKey : undefined;
       const videoFrames: string[] = Array.isArray(body.videoFrames) ? body.videoFrames : [];
-      const mediaKind: 'photo' | 'video' = video ? 'video' : 'photo';
       const capturedAt: string = body.clientCapturedAt || new Date().toISOString();
       const lat = typeof body.clientLat === 'number' ? body.clientLat : null;
       const lng = typeof body.clientLng === 'number' ? body.clientLng : null;
 
-      if (attempt === 1 && !photo) return fail(res, 400, 'A camera photo is required.');
-      if (attempt === 2 && !photo && !video && videoFrames.length === 0)
+      // Only objects this user PUT to Storage (incoming/<userId>/…) may be referenced.
+      for (const k of [photoKey, videoKey]) {
+        if (k && !isOwnedEvidenceKey(k, principal.userId)) {
+          return fail(res, 403, 'Evidence key does not belong to this session.');
+        }
+      }
+
+      if (attempt === 1 && !photoKey) return fail(res, 400, 'A camera photo is required.');
+      if (attempt === 2 && !photoKey && !videoKey && videoFrames.length === 0)
         return fail(res, 400, 'A camera video or photo is required for the second attempt.');
+
       const { version: rulesVersion, rules } = await activeRules();
 
+      // Reject too-few-streams before touching Storage / the model.
       if (declaredStreams.length < (rules.min_declared_streams ?? 2)) {
         const r = renderReason('TOO_FEW_STREAMS');
         return res.json({
@@ -231,6 +270,14 @@ export function mountApiRoutes(app: Express) {
           confirmedStreams: [],
         });
       }
+
+      // Pull the uploaded bytes back for hashing + the vision model.
+      const photoData = photoKey ? await fetchEvidence(photoKey) : null;
+      if (photoKey && !photoData) return fail(res, 502, 'Could not read the uploaded photo.');
+      const videoData = videoKey ? await fetchEvidence(videoKey) : null;
+      if (videoKey && !videoData) return fail(res, 502, 'Could not read the uploaded video.');
+
+      const mediaKind: 'photo' | 'video' = videoData ? 'video' : 'photo';
 
       const collectionDate = istDate(capturedAt);
 
@@ -289,14 +336,14 @@ export function mountApiRoutes(app: Express) {
       }
 
       // --- hashes (from the still image we have) ---
-      const hashSource = photo || videoFrames[0];
+      const hashBuffer: Buffer | null =
+        photoData?.buffer ?? (videoFrames[0] ? decodeDataUrl(videoFrames[0]).buffer : null);
       let phash: string | null = null;
       let contentHash: string | null = null;
-      if (hashSource) {
+      if (hashBuffer) {
         try {
-          const { buffer } = decodeDataUrl(hashSource);
-          phash = await dHash(buffer);
-          contentHash = sha256(buffer);
+          phash = await dHash(hashBuffer);
+          contentHash = sha256(hashBuffer);
         } catch (e: any) {
           console.error('[verify] hash failed:', e?.message);
         }
@@ -317,8 +364,8 @@ export function mountApiRoutes(app: Express) {
       try {
         extract =
           mediaKind === 'video'
-            ? await extractFromVideo(video, videoFrames, declaredStreams)
-            : await extractFromPhoto(photo!, declaredStreams);
+            ? await extractFromVideo(videoData?.dataUrl, videoFrames, declaredStreams)
+            : await extractFromPhoto(photoData!.dataUrl, declaredStreams);
       } catch (e: any) {
         await db.from('handovers').update({ status: 'in_review', decision_reason_code: 'SERVICE_ERROR' }).eq('id', handoverId);
         const r = renderReason('SERVICE_ERROR');
@@ -347,19 +394,42 @@ export function mountApiRoutes(app: Express) {
         per_stream: extract.evidence.streams as any,
       });
 
-      const stored = hashSource
-        ? await uploadEvidence(handoverId, mediaKind === 'video' ? 'keyframe' : 'photo', hashSource, 0)
-        : null;
-      if (video) await uploadEvidence(handoverId, 'video', video, 0);
-      await db.from('handover_media').insert({
-        handover_id: handoverId,
-        attempt,
-        kind: mediaKind === 'video' ? 'keyframe' : 'photo',
-        storage_path: stored?.path ?? 'not-stored',
-        content_hash: contentHash,
-        phash,
-        bytes: stored?.bytes ?? null,
-      });
+      // Media rows point straight at the client-uploaded objects — nothing is re-uploaded.
+      // The only server write here is the derived keyframe from a frames-only video attempt.
+      const mediaRows: Record<string, any>[] = [];
+      if (photoData && photoKey) {
+        mediaRows.push({
+          handover_id: handoverId,
+          attempt,
+          kind: 'photo',
+          storage_path: photoKey,
+          content_hash: contentHash,
+          phash,
+          bytes: photoData.bytes,
+        });
+      }
+      if (videoData && videoKey) {
+        mediaRows.push({
+          handover_id: handoverId,
+          attempt,
+          kind: 'video',
+          storage_path: videoKey,
+          bytes: videoData.bytes,
+        });
+      }
+      if (!photoData && videoFrames[0]) {
+        const kf = await uploadEvidence(handoverId, 'keyframe', videoFrames[0], 0);
+        mediaRows.push({
+          handover_id: handoverId,
+          attempt,
+          kind: 'keyframe',
+          storage_path: kf?.path ?? 'not-stored',
+          content_hash: contentHash,
+          phash,
+          bytes: kf?.bytes ?? null,
+        });
+      }
+      if (mediaRows.length) await db.from('handover_media').insert(mediaRows);
 
       // --- adjudicate ---
       const decision = adjudicate({
