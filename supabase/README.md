@@ -48,6 +48,32 @@ imports Supabase yet — that wiring is Phase 2, after this schema is reviewed.
 - `tickets.token` is `NULL` until the HMAC signer lands (Phase 3) and real BRTS/Metro
   validation is integrated (G2).
 
+## Migration history
+
+**Status:** `0001`–`0014` are applied to the live project (`vtqzyldosmpkxuqqlica`). They were
+applied as raw SQL through the Management API, not `supabase db push`, so the CLI tracker
+`supabase_migrations.schema_migrations` did not exist. On 2026-09-03 it was created and
+backfilled with one row per file (`version` = `0001`…`0014`) — the effect of
+`supabase migration repair --status applied 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012 0013 0014`
+— so a fresh clone's `supabase db push` / `supabase migration list` see all 14 as applied.
+
+Every file is **idempotent** (safe to replay against a partially- or fully-migrated DB):
+`create … if not exists`, `create or replace`, `drop … if exists` before each
+`create trigger` / `create policy` / `add constraint`, and `on conflict` on every seed
+insert.
+
+**Clean-rebuild reproduces prod — verified 2026-09-03.** All 14 files were replayed in
+order into empty schemas on the live project (a `supabase db reset` equivalent; branching
+is Pro-only on this org) and the result structurally diffed against `public`/`app`: zero
+differences across tables, every column (type / default / nullability), indexes, all
+constraint definitions, the 14 RLS policies (name / cmd / using / with-check), the 8 `app`
+functions, and the 4 triggers. `0008_storage.sql` (one `storage.buckets` upsert) is the
+only file not covered by that replay; it is a trivial idempotent insert.
+
+**Prerequisite for the CLI workflow:** the repo has no `supabase/config.toml` yet — run
+`supabase init` once and set `project_id = "vtqzyldosmpkxuqqlica"`, then the commands
+below work.
+
 ## How to apply
 
 **Option A — Supabase CLI (local dev):**
@@ -60,7 +86,7 @@ supabase db reset          # runs migrations/*.sql then seed.sql
 ```bash
 # migrations only (no seed.sql):
 supabase link --project-ref <ref>
-supabase db push
+supabase db push           # a no-op now: the tracker lists 0001–0014 as applied
 ```
 
 **Option C — psql:**
@@ -68,8 +94,11 @@ supabase db push
 for f in supabase/migrations/*.sql; do psql "$DATABASE_URL" -f "$f"; done
 ```
 
-> Not yet run against a live database in this environment (no local Postgres / Docker /
-> Supabase CLI available). First checkpoint task: apply to your project and report errors.
+**Verifying a clean rebuild reproduces prod** (needs Docker or a scratch Postgres):
+```bash
+supabase db reset                                   # or: apply migrations/*.sql then seed.sql to an empty DB
+supabase db diff --linked --schema public,app       # must report no differences
+```
 
 ## After applying, set in `.env`
 

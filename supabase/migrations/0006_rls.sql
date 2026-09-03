@@ -7,6 +7,11 @@
 -- for — i.e. they are the read rules for any future direct-from-browser access and a
 -- defense-in-depth layer today. Every table has RLS enabled, so anything without an
 -- explicit policy is fully closed to anon/authenticated.
+--
+-- Idempotent: `alter table ... enable row level security` and `alter view ... set (...)`
+-- are already no-ops on re-run; each policy is preceded by `drop policy if exists` so the
+-- whole file can be replayed (clean `supabase db reset`, or a re-run after a partial
+-- failure) without erroring on an existing policy.
 
 alter table public.users                enable row level security;
 alter table public.devices              enable row level security;
@@ -29,38 +34,46 @@ alter view public.v_household_balance set (security_invoker = true);
 alter view public.v_review_queue      set (security_invoker = true);
 
 -- ---- users / devices : only your own row -------------------------------------------
+drop policy if exists users_select_self on public.users;
 create policy users_select_self on public.users
   for select to anon, authenticated
   using (id = app.uid());
 
+drop policy if exists devices_select_self on public.devices;
 create policy devices_select_self on public.devices
   for select to anon, authenticated
   using (user_id = app.uid());
 
 -- ---- wards : public reference data -------------------------------------------------
+drop policy if exists wards_select_all on public.wards;
 create policy wards_select_all on public.wards
   for select to anon, authenticated
   using (true);
 
 -- ---- reward_rules : app needs to show the current reward rate ---------------------
+drop policy if exists reward_rules_select_all on public.reward_rules;
 create policy reward_rules_select_all on public.reward_rules
   for select to anon, authenticated
   using (true);
 
 -- ---- households & membership ----------------------------------------------------
+drop policy if exists households_select_member on public.households;
 create policy households_select_member on public.households
   for select to anon, authenticated
   using (app.is_household_member(id));
 
+drop policy if exists household_members_select_self on public.household_members;
 create policy household_members_select_self on public.household_members
   for select to anon, authenticated
   using (user_id = app.uid());
 
 -- ---- handovers and their evidence : household members only ---------------------
+drop policy if exists handovers_select_member on public.handovers;
 create policy handovers_select_member on public.handovers
   for select to anon, authenticated
   using (app.is_household_member(household_id));
 
+drop policy if exists handover_media_select_member on public.handover_media;
 create policy handover_media_select_member on public.handover_media
   for select to anon, authenticated
   using (exists (
@@ -69,6 +82,7 @@ create policy handover_media_select_member on public.handover_media
       and app.is_household_member(h.household_id)
   ));
 
+drop policy if exists verification_events_select_member on public.verification_events;
 create policy verification_events_select_member on public.verification_events
   for select to anon, authenticated
   using (exists (
@@ -78,23 +92,28 @@ create policy verification_events_select_member on public.verification_events
   ));
 
 -- ---- credit ledger / tickets / milestones : household members only -------------
+drop policy if exists credit_ledger_select_member on public.credit_ledger;
 create policy credit_ledger_select_member on public.credit_ledger
   for select to anon, authenticated
   using (app.is_household_member(household_id));
 
+drop policy if exists tickets_select_member on public.tickets;
 create policy tickets_select_member on public.tickets
   for select to anon, authenticated
   using (app.is_household_member(household_id));
 
+drop policy if exists bin_milestones_select_member on public.bin_milestones;
 create policy bin_milestones_select_member on public.bin_milestones
   for select to anon, authenticated
   using (app.is_household_member(household_id));
 
 -- ---- workers : only your own worker record & issuances -------------------------
+drop policy if exists workers_select_self on public.workers;
 create policy workers_select_self on public.workers
   for select to anon, authenticated
   using (user_id = app.uid());
 
+drop policy if exists worker_issuances_select_self on public.worker_issuances;
 create policy worker_issuances_select_self on public.worker_issuances
   for select to anon, authenticated
   using (exists (
