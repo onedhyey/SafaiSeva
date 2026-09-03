@@ -1,0 +1,21 @@
+// Shared great-circle distance helpers. Used by the per-household geofence check
+// (server/fraud.ts) and the "someone here already registered?" proximity check on
+// household creation (server/routes.ts).
+
+const EARTH_RADIUS_M = 6_371_000;
+
+/** Great-circle distance between two lat/lng points, in metres. */
+export function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return EARTH_RADIUS_M * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/** Same, in kilometres. */
+export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  return haversineMeters(lat1, lng1, lat2, lng2) / 1000;
+}
