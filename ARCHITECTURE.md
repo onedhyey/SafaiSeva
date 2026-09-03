@@ -99,7 +99,7 @@ src/lib/verification/
   contract.ts       evidence + decision + reward-rules types
   reasonCodes.ts    reason enum → EN + Gujarati messages + "what to change"
   adjudicator.ts    the pure decision function (14 unit tests: npm test)
-supabase/migrations/  0001..0012  (see supabase/README.md)
+supabase/migrations/  0001..0014  (see supabase/README.md)
 ```
 
 ## Running it
@@ -114,6 +114,8 @@ supabase/migrations/  0001..0012  (see supabase/README.md)
 - `tsx` needs a clean `node_modules` on Node 26; mixing `bun install` and `npm install`
   corrupts it. The dev server can be slow to bind if a previous run left an orphan on
   Vite's HMR port 24678 — kill `tsx` / `esbuild --service` / `vite` and free that port.
-- Migrations here were applied via the Supabase Management API, not `supabase db push`,
-  so `supabase_migrations.schema_migrations` doesn't list them. `0006_rls.sql` is **not**
-  idempotent — guard it or `supabase migration repair` before a CLI push.
+- Migrations here were applied via the Supabase Management API, not `supabase db push`.
+  Reconciled 2026-09-03 (commit 824a132): `supabase_migrations.schema_migrations` is
+  backfilled with 0001..0014 and `0006_rls.sql` is now idempotent. Still missing
+  `supabase/config.toml` — run `supabase init` before a CLI `db push` / `db reset`.
+  See supabase/README.md "Migration history".
