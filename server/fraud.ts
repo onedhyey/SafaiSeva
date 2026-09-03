@@ -4,8 +4,13 @@
 
 import { admin } from './supabaseAdmin.ts';
 import { hammingHex } from './phash.ts';
+import { haversineKm, haversineMeters } from './geo.ts';
 
 const IST_OFFSET_MIN = 330; // UTC+05:30, no DST
+
+// When a household has a point location (0014) but no polygon yet, treat anything beyond
+// this many metres from the point as outside the geofence (audit G1).
+const HOUSEHOLD_GEOFENCE_RADIUS_M = 120;
 
 export function istHour(iso: string | Date): number {
   const d = typeof iso === 'string' ? new Date(iso) : iso;
@@ -17,16 +22,6 @@ export function istDate(iso: string | Date): string {
   const d = typeof iso === 'string' ? new Date(iso) : iso;
   const shifted = new Date(d.getTime() + IST_OFFSET_MIN * 60_000);
   return shifted.toISOString().slice(0, 10);
-}
-
-function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
-  const R = 6371;
-  const dLat = ((bLat - aLat) * Math.PI) / 180;
-  const dLng = ((bLng - aLng) * Math.PI) / 180;
-  const s =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((aLat * Math.PI) / 180) * Math.cos((bLat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(s));
 }
 
 export interface FraudContext {
@@ -45,7 +40,9 @@ export async function runFraudChecks(ctx: FraudContext): Promise<string[]> {
   // --- household config (geofence bbox + collection window) ---
   const { data: hh } = await db
     .from('households')
-    .select('collection_start_hour, collection_end_hour, geofence_polygon, ward:wards(min_lat,max_lat,min_lng,max_lng)')
+    .select(
+      'collection_start_hour, collection_end_hour, geofence_polygon, latitude, longitude, ward:wards(min_lat,max_lat,min_lng,max_lng)'
+    )
     .eq('id', ctx.householdId)
     .maybeSingle();
 
@@ -66,14 +63,21 @@ export async function runFraudChecks(ctx: FraudContext): Promise<string[]> {
     if (h < hh.collection_start_hour || h >= hh.collection_end_hour) signals.add('window_outside');
   }
 
-  // 3. Geofence. Polygon support is in SQL (app.point_in_geofence); until AMC supplies
-  //    polygons this is the ward bounding box (audit G1).
+  // 3. Geofence (audit G1). Precedence, tightest first:
+  //    a) SQL polygon (app.point_in_geofence) — when AMC supplies households.geofence_polygon;
+  //    b) per-household point + ~120 m radius — when 0014 latitude/longitude is set;
+  //    c) ward bounding box (~km²) — the last-resort fallback.
   if (hh && ctx.lat != null && ctx.lng != null && !hh.geofence_polygon) {
-    const w: any = Array.isArray(hh.ward) ? hh.ward[0] : hh.ward;
-    if (w) {
-      const inside =
-        ctx.lat >= w.min_lat && ctx.lat <= w.max_lat && ctx.lng >= w.min_lng && ctx.lng <= w.max_lng;
-      if (!inside) signals.add('geo_outside');
+    if (hh.latitude != null && hh.longitude != null) {
+      const metres = haversineMeters(ctx.lat, ctx.lng, hh.latitude, hh.longitude);
+      if (metres > HOUSEHOLD_GEOFENCE_RADIUS_M) signals.add('geo_outside');
+    } else {
+      const w: any = Array.isArray(hh.ward) ? hh.ward[0] : hh.ward;
+      if (w) {
+        const inside =
+          ctx.lat >= w.min_lat && ctx.lat <= w.max_lat && ctx.lng >= w.min_lng && ctx.lng <= w.max_lng;
+        if (!inside) signals.add('geo_outside');
+      }
     }
   }
 

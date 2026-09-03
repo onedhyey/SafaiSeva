@@ -15,6 +15,7 @@ import {
   isOwnedEvidenceKey,
 } from './storage.ts';
 import { signTicket } from './qrToken.ts';
+import { haversineMeters } from './geo.ts';
 import { adjudicate } from '../src/lib/verification/adjudicator.ts';
 import { FALLBACK_RULES, RewardRules, WasteStream, ALL_STREAMS } from '../src/lib/verification/contract.ts';
 import { renderReason } from '../src/lib/verification/reasonCodes.ts';
@@ -927,15 +928,4 @@ function genHouseholdCode(): string {
   let s = '';
   for (let i = 0; i < 6; i++) s += A[Math.floor(Math.random() * A.length)];
   return `HH-U-${s}`;
-}
-
-function haversineMeters(la1: number, lo1: number, la2: number, lo2: number): number {
-  const R = 6371000;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(la2 - la1);
-  const dLon = toRad(lo2 - lo1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(la1)) * Math.cos(toRad(la2)) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
