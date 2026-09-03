@@ -16,6 +16,12 @@ import {
 } from './storage.ts';
 import { signTicket } from './qrToken.ts';
 import { haversineMeters } from './geo.ts';
+import {
+  verifyLimiter,
+  signLimiter,
+  mutationLimiter,
+  readLimiter,
+} from './rateLimit.ts';
 import { adjudicate } from '../src/lib/verification/adjudicator.ts';
 import { FALLBACK_RULES, RewardRules, WasteStream, ALL_STREAMS } from '../src/lib/verification/contract.ts';
 import { renderReason } from '../src/lib/verification/reasonCodes.ts';
@@ -75,7 +81,7 @@ export function mountApiRoutes(app: Express) {
   // ---------------------------------------------------------------------------------
   // GET /api/wallet — authoritative balance + recent activity
   // ---------------------------------------------------------------------------------
-  app.get('/api/wallet', async (req: Request, res: Response) => {
+  app.get('/api/wallet', readLimiter, async (req: Request, res: Response) => {
     try {
       const principal = await resolvePrincipal(req);
       const hh = await householdForUser(principal.userId);
@@ -127,7 +133,7 @@ export function mountApiRoutes(app: Express) {
   // (5 / 10 / 20). Each awarded once (bin_milestones unique per household+milestone),
   // settled immediately.
   // ---------------------------------------------------------------------------------
-  app.post('/api/household/bins', async (req: Request, res: Response) => {
+  app.post('/api/household/bins', mutationLimiter, async (req: Request, res: Response) => {
     try {
       const principal = await resolvePrincipal(req);
       const hh = await householdForUser(principal.userId);
@@ -205,7 +211,7 @@ export function mountApiRoutes(app: Express) {
   // sends only `key` to /api/handovers/verify. Authenticated so it is not an open DoS
   // surface; the bucket's 25 MB object cap and the 2 h token expiry bound abuse further.
   // ---------------------------------------------------------------------------------
-  app.post('/api/uploads/sign', async (req: Request, res: Response) => {
+  app.post('/api/uploads/sign', signLimiter, async (req: Request, res: Response) => {
     try {
       const principal = await resolvePrincipal(req);
       const kind = String(req.body?.kind ?? '');
@@ -229,7 +235,7 @@ export function mountApiRoutes(app: Express) {
   // photoKey / videoKey reference objects the client already PUT to Storage via
   // /api/uploads/sign. videoFrames are small derived thumbnails and stay inline.
   // ---------------------------------------------------------------------------------
-  app.post('/api/handovers/verify', async (req: Request, res: Response) => {
+  app.post('/api/handovers/verify', verifyLimiter, async (req: Request, res: Response) => {
     try {
       const principal = await resolvePrincipal(req);
       const db = admin();
@@ -529,7 +535,7 @@ export function mountApiRoutes(app: Express) {
   // row. The QR token is HMAC-signed (audit I6). Real fare-gate validation needs a
   // transit partnership (G2).
   // ---------------------------------------------------------------------------------
-  app.post('/api/tickets/redeem', async (req: Request, res: Response) => {
+  app.post('/api/tickets/redeem', mutationLimiter, async (req: Request, res: Response) => {
     try {
       const principal = await resolvePrincipal(req);
       const hh = await householdForUser(principal.userId);
@@ -595,7 +601,7 @@ export function mountApiRoutes(app: Express) {
   // ---------------------------------------------------------------------------------
   // POST /api/handovers/:id/dispute
   // ---------------------------------------------------------------------------------
-  app.post('/api/handovers/:id/dispute', async (req: Request, res: Response) => {
+  app.post('/api/handovers/:id/dispute', mutationLimiter, async (req: Request, res: Response) => {
     try {
       const principal = await resolvePrincipal(req);
       const db = admin();
@@ -636,7 +642,7 @@ export function mountApiRoutes(app: Express) {
   // ---------------------------------------------------------------------------------
 
   // GET /api/review-queue — handovers the backend routed to a human.
-  app.get('/api/review-queue', async (req: Request, res: Response) => {
+  app.get('/api/review-queue', readLimiter, async (req: Request, res: Response) => {
     try {
       await resolveWorker(req);
       const { data } = await admin()
@@ -650,7 +656,7 @@ export function mountApiRoutes(app: Express) {
   });
 
   // POST /api/review-queue/:id/decide  { decision: 'approve' | 'reject', reason?, note? }
-  app.post('/api/review-queue/:id/decide', async (req: Request, res: Response) => {
+  app.post('/api/review-queue/:id/decide', mutationLimiter, async (req: Request, res: Response) => {
     try {
       const worker = await resolveWorker(req);
       const db = admin();
@@ -732,7 +738,7 @@ export function mountApiRoutes(app: Express) {
 
   // POST /api/worker/issue  { householdCode, streams: [], workerLat?, workerLng?, note? }
   // A karmachari credits a household at the door (feature phone / no smartphone).
-  app.post('/api/worker/issue', async (req: Request, res: Response) => {
+  app.post('/api/worker/issue', mutationLimiter, async (req: Request, res: Response) => {
     try {
       const worker = await resolveWorker(req);
       const db = admin();
@@ -823,7 +829,7 @@ export function mountApiRoutes(app: Express) {
   //   POST /api/household/create  { address?, lat?, lng? }  -> { code, joinCode, nearbyExisting? }
   //   POST /api/household/join    { code }                  -> { code }
   // ---------------------------------------------------------------------------------
-  app.post('/api/household/create', async (req: Request, res: Response) => {
+  app.post('/api/household/create', mutationLimiter, async (req: Request, res: Response) => {
     try {
       const principal = await resolvePrincipal(req);
       if (await householdForUser(principal.userId)) {
@@ -893,7 +899,7 @@ export function mountApiRoutes(app: Express) {
     }
   });
 
-  app.post('/api/household/join', async (req: Request, res: Response) => {
+  app.post('/api/household/join', mutationLimiter, async (req: Request, res: Response) => {
     try {
       const principal = await resolvePrincipal(req);
       if (await householdForUser(principal.userId)) {
