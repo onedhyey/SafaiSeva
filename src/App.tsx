@@ -26,6 +26,7 @@ import {
   getOfficerDashboard,
   getOfficerAnomalies,
   getWardLeaderboard,
+  getWorkerProfile,
   BinsInfo,
 } from './lib/api';
 import { serverHandoverToRecord, serverTicketToRecord } from './lib/serverMap';
@@ -213,10 +214,29 @@ export default function App() {
         console.warn('Ward leaderboard API unavailable — using seeded leaderboard.', e);
       }
 
+      // Karmachari header identity + today's counters (schema: workers / worker_issuances).
+      let mergedKarmachari = karm;
+      try {
+        const wp = await getWorkerProfile();
+        mergedKarmachari = {
+          ...karm,
+          id: wp.id,
+          name: wp.name,
+          workerCode: wp.workerCode,
+          zone: wp.zone,
+          ward: wp.ward,
+          reviewsClearedToday: wp.reviewsClearedToday,
+          manualCreditsIssued: wp.manualCreditsIssued,
+          overrideRate: wp.overrideRate,
+        };
+      } catch (e) {
+        console.warn('Worker profile API unavailable — using seeded karmachari.', e);
+      }
+
       setHousehold(mergedHousehold);
       setHandovers(mergedHandovers);
       setTickets(mergedTickets);
-      setKarmachari(karm);
+      setKarmachari(mergedKarmachari);
       setWardStats(mergedWardStats);
       setSettings(sett);
     } catch (err) {

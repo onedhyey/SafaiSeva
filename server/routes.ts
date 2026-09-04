@@ -641,6 +641,48 @@ export function mountApiRoutes(app: Express) {
   // Karmachari — review queue and manual (no-app) credit issuance (audit A4 / G3 / I7)
   // ---------------------------------------------------------------------------------
 
+  // GET /api/worker/profile — the karmachari header: identity from the resolved `workers`
+  // row, plus today's live counters (audit G3). Replaces the seeded KarmachariProfile.
+  app.get('/api/worker/profile', readLimiter, async (req: Request, res: Response) => {
+    try {
+      const worker = await resolveWorker(req);
+      const db = admin();
+      const today = istDate(new Date().toISOString());
+
+      let wardName = 'Ward 12 - Navrangpura';
+      if (worker.wardId) {
+        const { data: w } = await db.from('wards').select('name').eq('id', worker.wardId).maybeSingle();
+        if (w?.name) wardName = w.name as string;
+      }
+
+      const [{ count: issuedToday }, { count: reviewedToday }] = await Promise.all([
+        db
+          .from('worker_issuances')
+          .select('id', { count: 'exact', head: true })
+          .eq('worker_id', worker.workerId)
+          .eq('issued_date', today),
+        db
+          .from('handovers')
+          .select('id', { count: 'exact', head: true })
+          .eq('reviewed_by', worker.userId)
+          .gte('reviewed_at', `${today}T00:00:00Z`),
+      ]);
+
+      return res.json({
+        id: worker.workerCode,
+        name: worker.name,
+        workerCode: worker.workerCode,
+        zone: worker.zone ?? 'West Zone',
+        ward: wardName,
+        reviewsClearedToday: reviewedToday ?? 0,
+        manualCreditsIssued: issuedToday ?? 0,
+        overrideRate: 0,
+      });
+    } catch (e: any) {
+      return fail(res, e.status ?? 500, e.message ?? 'worker profile error');
+    }
+  });
+
   // GET /api/review-queue — handovers the backend routed to a human.
   app.get('/api/review-queue', readLimiter, async (req: Request, res: Response) => {
     try {
