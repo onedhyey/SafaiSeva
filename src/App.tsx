@@ -21,7 +21,13 @@ import {
   resetDatabase,
 } from './lib/db';
 import { useAuth } from './lib/authContext';
-import { getWallet, getOfficerDashboard, getOfficerAnomalies, BinsInfo } from './lib/api';
+import {
+  getWallet,
+  getOfficerDashboard,
+  getOfficerAnomalies,
+  getWardLeaderboard,
+  BinsInfo,
+} from './lib/api';
 import { serverHandoverToRecord, serverTicketToRecord } from './lib/serverMap';
 import { useOnline } from './lib/useOnline';
 import {
@@ -175,9 +181,9 @@ export default function App() {
         console.warn('Wallet API unavailable — showing local state only.', e);
       }
 
-      // Ward Officer screen is backend-driven (schema 0015 + 0016). Overlay the server
-      // aggregates onto the seed; the seed remains the fallback if the API is unreachable
-      // and still supplies `leaderboard` (a resident/ImpactView concern).
+      // Ward stats are backend-driven: the officer screen (schema 0015 + 0016) and the
+      // resident Impact-tab leaderboard (schema 0017). The seed remains the fallback for
+      // whichever call is unreachable.
       let mergedWardStats = ward;
       try {
         const [dash, anom] = await Promise.all([
@@ -185,7 +191,7 @@ export default function App() {
           getOfficerAnomalies(),
         ]);
         mergedWardStats = {
-          ...ward,
+          ...mergedWardStats,
           wardName: dash.wardName,
           householdsEnrolled: dash.householdsEnrolled,
           participationRateThisWeek: dash.participationRateThisWeek,
@@ -199,6 +205,12 @@ export default function App() {
         };
       } catch (e) {
         console.warn('Officer API unavailable — using seeded ward stats.', e);
+      }
+      try {
+        const { leaderboard } = await getWardLeaderboard();
+        if (leaderboard.length) mergedWardStats = { ...mergedWardStats, leaderboard };
+      } catch (e) {
+        console.warn('Ward leaderboard API unavailable — using seeded leaderboard.', e);
       }
 
       setHousehold(mergedHousehold);

@@ -124,9 +124,16 @@ since the snapshot, live handover status counts, live participation from househo
 assignment, live `fraud_flags` rollups), and the API prefers the live figure once its
 volume is credible. `src/lib/seed.ts` `wardStats` is now only the offline fallback.
 
-**Still to plug in:** a real household roster so the live columns dominate; per‑worker
-route/shift data so the audit table isn't a snapshot; wiring `RoleSelectionModal`'s
-officer code to real credentials when auth is enabled.
+The resident ward leaderboard (`GET /api/ward/leaderboard`, schema `0017`) follows the
+same shape: a seeded baseline per ward, overlaid with each household's live settled
+balance (`v_household_balance`) and re-ranked, so it is real for the households that
+exist and fills in as the ward onboards.
+
+**Still to plug in:** a real household roster so every officer/leaderboard row is live
+rather than a seeded baseline; per‑worker route/shift data so the karmachari audit table
+isn't a snapshot; wiring `RoleSelectionModal`'s officer code to real credentials when
+auth is enabled. All three need AMC-supplied data (see G3, G8) — they are integration
+seams, not remaining app work.
 
 ---
 
