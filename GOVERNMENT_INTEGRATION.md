@@ -48,10 +48,13 @@ they call to redeem `verifyTicket(token)`. Wire a settlement export from
 sanitation HR. Required before the manual "issue credit without app" path and the review
 queue can be trusted.
 
-**Stub today:** `public.workers` is seeded with one worker. The app's Karmachari / Ward
-Officer roles are a **client‑side toggle** with mock access codes (`RoleSelectionModal`);
-there is no server‑side role. The review‑queue and manual‑issuance screens still read /
-write local seed data.
+**Stub today:** `public.workers` is seeded with one worker. As of `64ac176` the Karmachari
+role IS server‑side: `server/principal.ts` → `resolveWorker(req)` gates
+`GET /api/review-queue`, `POST /api/review-queue/:id/decide` and `POST /api/worker/issue`
+(demo: `x-demo-worker` header; the Clerk principal when auth is on). Still stubbed: the
+**roster** (one seeded row, no real routes / shifts), and the Ward Officer role — no
+server side yet (see G7). The client role picker (`RoleSelectionModal`) still uses mock
+access codes.
 
 **Plug‑in:** load `workers`; when authentication is enabled (see `ARCHITECTURE.md`), map
 the signed‑in principal to a `workers` row and gate the review / issuance API to it.
@@ -114,7 +117,9 @@ existing notice / enforcement system.
 ward stats, leaderboard and anomaly lists (`src/lib/seed.ts`). No server aggregates.
 
 **Plug‑in:** server‑side officer role (with auth), and real aggregate views over
-`handovers` / `credit_ledger` / `fraud_flags`.
+`handovers` / `credit_ledger` / `fraud_flags`. In progress: `0015_ward_officers.sql`
+(`ward_officers` table + demo officer) and a `resolveOfficer(req)` seam mirroring
+`resolveWorker`, feeding `GET /api/officer/{dashboard,leaderboard,anomalies}`.
 
 ---
 
