@@ -80,7 +80,7 @@ change and no query rewrite.
 | Resident dispute → routes handover to `in_review` | **server** (`POST /api/handovers/:id/dispute`) |
 | Karmachari review queue (approve / reject) | **server** (`GET /api/review-queue`, `POST /api/review-queue/:id/decide`) — shipped `64ac176` |
 | Manual "issue credit without app" | **server** (`POST /api/worker/issue`, daily cap via `workerCapExceeded()`) — shipped `64ac176` |
-| Ward Officer dashboard, leaderboard, anomalies | local seed fiction (`src/lib/seed.ts`) — server officer role + aggregate endpoints to build (G7) |
+| Ward Officer dashboard + anomalies | **server** (`resolveOfficer`, `GET /api/officer/dashboard`, `GET /api/officer/anomalies`; schema `0015` + `0016`) — seed is offline fallback only |
 | Offline capture queue | not built (P6) |
 
 ## Key files
@@ -100,7 +100,7 @@ src/lib/verification/
   contract.ts       evidence + decision + reward-rules types
   reasonCodes.ts    reason enum → EN + Gujarati messages + "what to change"
   adjudicator.ts    the pure decision function (14 unit tests: npm test)
-supabase/migrations/  0001..0015  (see supabase/README.md)
+supabase/migrations/  0001..0016  (see supabase/README.md)
 ```
 
 ## Running it
