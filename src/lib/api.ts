@@ -261,6 +261,21 @@ export interface ReviewItem {
   fraud_signals: string[];
 }
 
+export interface WorkerProfileResponse {
+  id: string;
+  name: string;
+  workerCode: string;
+  zone: string;
+  ward: string;
+  reviewsClearedToday: number;
+  manualCreditsIssued: number;
+  overrideRate: number;
+}
+
+export function getWorkerProfile(): Promise<WorkerProfileResponse> {
+  return apiFetch<WorkerProfileResponse>('/api/worker/profile', { asWorker: true });
+}
+
 export function getReviewQueue(): Promise<{ items: ReviewItem[] }> {
   return apiFetch('/api/review-queue', { asWorker: true });
 }

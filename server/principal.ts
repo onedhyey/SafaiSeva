@@ -223,6 +223,7 @@ export interface WorkerPrincipal {
   workerId: string;
   workerCode: string;
   name: string;
+  zone: string | null;
   wardId: string | null;
   dailyIssueCap: number;
 }
@@ -259,6 +260,7 @@ export async function resolveWorker(req: Request): Promise<WorkerPrincipal> {
     workerId: w.id,
     workerCode: w.worker_code,
     name: w.name,
+    zone: w.zone ?? null,
     wardId: w.ward_id ?? null,
     dailyIssueCap: w.daily_issue_cap ?? 25,
   };

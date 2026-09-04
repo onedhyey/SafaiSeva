@@ -80,6 +80,7 @@ change and no query rewrite.
 | Resident dispute → routes handover to `in_review` | **server** (`POST /api/handovers/:id/dispute`) |
 | Karmachari review queue (approve / reject) | **server** (`GET /api/review-queue`, `POST /api/review-queue/:id/decide`) — shipped `64ac176` |
 | Manual "issue credit without app" | **server** (`POST /api/worker/issue`, daily cap via `workerCapExceeded()`) — shipped `64ac176` |
+| Karmachari console header (identity + today's counters) | **server** (`GET /api/worker/profile`) — replaces the seeded `KarmachariProfile` |
 | Ward Officer dashboard + anomalies | **server** (`resolveOfficer`, `GET /api/officer/dashboard`, `GET /api/officer/anomalies`; schema `0015` + `0016`) — seed is offline fallback only |
 | Resident ward leaderboard (Impact tab) | **server** (`GET /api/ward/leaderboard`; schema `0017` — baseline overlaid with live settled balances) — seed is offline fallback only |
 | Offline capture queue | **client** (`src/lib/offlineQueue.ts` — `idb-keyval` store + idempotent replay via the verify endpoint's `idempotencyKey`; Outbox screen + `simulateOffline` toggle) — shipped (P6 / T3.1) |

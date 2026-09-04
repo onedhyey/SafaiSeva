@@ -51,10 +51,13 @@ queue can be trusted.
 **Stub today:** `public.workers` is seeded with one worker. As of `64ac176` the Karmachari
 role IS server‑side: `server/principal.ts` → `resolveWorker(req)` gates
 `GET /api/review-queue`, `POST /api/review-queue/:id/decide` and `POST /api/worker/issue`
-(demo: `x-demo-worker` header; the Clerk principal when auth is on). As of `0015` +
-`0016` the Ward Officer role is server‑side too (see G7). Still stubbed: the **roster**
-(one seeded row, no real routes / shifts). The client role picker (`RoleSelectionModal`)
-still uses mock access codes.
+(demo: `x-demo-worker` header; the Clerk principal when auth is on). `GET /api/worker/profile`
+(added alongside T3.3) now serves the console header — identity from `workers`, "in queue"
+from the live review queue, "no‑app issued" from today's `worker_issuances` — so the
+`KarmachariProfile` seed is gone from the UI entirely. As of `0015` + `0016` the Ward
+Officer role is server‑side too (see G7). Still stubbed: the **roster** (one seeded row,
+no real routes / shifts). The client role picker (`RoleSelectionModal`) still uses mock
+access codes.
 
 **Plug‑in:** load `workers`; when authentication is enabled (see `ARCHITECTURE.md`), map
 the signed‑in principal to a `workers` row and gate the review / issuance API to it.

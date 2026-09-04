@@ -145,7 +145,7 @@ permission; there is deliberately no file‑upload fallback.
 | Resident dispute → routes to human review | **real** — `POST /api/handovers/:id/dispute` |
 | Geofence polygon | **ward bounding box** until AMC supplies polygons (G1) |
 | Collection window | placeholder 6 AM–12 PM until real route schedules (G4) |
-| Karmachari review queue + doorstep issuance | **real** — `resolveWorker` + `GET /api/review-queue`, `POST /api/review-queue/:id/decide`, `POST /api/worker/issue` (shipped `64ac176`). Roster is one seeded worker until AMC HR data (G3) |
+| Karmachari review queue + doorstep issuance + console header | **real** — `resolveWorker` + `GET /api/review-queue`, `POST /api/review-queue/:id/decide`, `POST /api/worker/issue`, `GET /api/worker/profile` (shipped `64ac176`; profile endpoint T3.3). Roster is one seeded worker until AMC HR data (G3) |
 | Ward Officer dashboard + anomalies | **real** — `resolveOfficer` + `GET /api/officer/{dashboard,anomalies}` (schema `0015`+`0016`); seed is the offline fallback |
 | Resident ward leaderboard (Impact tab) | **real** — `GET /api/ward/leaderboard` (schema `0017`); baseline overlaid with live settled balances |
 | Authentication | **off** by design — anonymous per‑device session. Clerk is wired and dormant; flip `VITE_AUTH_ENABLED`. See ARCHITECTURE.md |
