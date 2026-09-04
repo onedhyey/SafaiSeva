@@ -81,6 +81,7 @@ change and no query rewrite.
 | Karmachari review queue (approve / reject) | **server** (`GET /api/review-queue`, `POST /api/review-queue/:id/decide`) — shipped `64ac176` |
 | Manual "issue credit without app" | **server** (`POST /api/worker/issue`, daily cap via `workerCapExceeded()`) — shipped `64ac176` |
 | Ward Officer dashboard + anomalies | **server** (`resolveOfficer`, `GET /api/officer/dashboard`, `GET /api/officer/anomalies`; schema `0015` + `0016`) — seed is offline fallback only |
+| Resident ward leaderboard (Impact tab) | **server** (`GET /api/ward/leaderboard`; schema `0017` — baseline overlaid with live settled balances) — seed is offline fallback only |
 | Offline capture queue | **client** (`src/lib/offlineQueue.ts` — `idb-keyval` store + idempotent replay via the verify endpoint's `idempotencyKey`; Outbox screen + `simulateOffline` toggle) — shipped (P6 / T3.1) |
 
 ## Key files
@@ -103,7 +104,7 @@ src/lib/verification/
 src/lib/
   offlineQueue.ts   offline capture queue: idb-keyval store + idempotent replay (P6)
   useOnline.ts      navigator.onLine + online/offline events
-supabase/migrations/  0001..0016  (see supabase/README.md)
+supabase/migrations/  0001..0017  (see supabase/README.md)
 ```
 
 ## Running it
@@ -120,6 +121,8 @@ supabase/migrations/  0001..0016  (see supabase/README.md)
   Vite's HMR port 24678 — kill `tsx` / `esbuild --service` / `vite` and free that port.
 - Migrations here were applied via the Supabase Management API, not `supabase db push`.
   Reconciled 2026-09-03 (commit 824a132): `supabase_migrations.schema_migrations` is
-  backfilled with 0001..0014 and `0006_rls.sql` is now idempotent. `supabase/config.toml` is
-  committed (CLI v2.116.0). Run `supabase link` before a CLI `db push` / `db reset`.
+  backfilled with 0001..0014 and `0006_rls.sql` is now idempotent. `0015`–`0017` (Tier 2/3)
+  were applied the same way on 2026-09-04 with their `schema_migrations` rows inserted, so
+  the tracker lists 0001..0017 as applied. `supabase/config.toml` is committed
+  (CLI v2.116.0). Run `supabase link` before a CLI `db push` / `db reset`.
   See supabase/README.md "Migration history".

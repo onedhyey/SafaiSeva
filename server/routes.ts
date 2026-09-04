@@ -917,6 +917,50 @@ export function mountApiRoutes(app: Express) {
   });
 
   // ---------------------------------------------------------------------------------
+  // GET /api/ward/leaderboard — the resident Impact-tab leaderboard (audit F1 / T3.3).
+  // Backed by v_ward_leaderboard (schema 0017): an imported baseline overlaid with each
+  // household's live settled balance. Anonymised to society + credits before returning.
+  // Any resident principal may read it; it is scoped to the caller's ward.
+  // ---------------------------------------------------------------------------------
+  app.get('/api/ward/leaderboard', readLimiter, async (req: Request, res: Response) => {
+    try {
+      const principal = await resolvePrincipal(req);
+      const db = admin();
+
+      let wardId: string | null = null;
+      const hh = await householdForUser(principal.userId);
+      if (hh) {
+        const { data } = await db.from('households').select('ward_id').eq('id', hh.id).maybeSingle();
+        wardId = (data?.ward_id as string | undefined) ?? null;
+      }
+      if (!wardId) {
+        const { data: w } = await db.from('wards').select('id').eq('code', 'W12-NAVRANGPURA').maybeSingle();
+        wardId = (w?.id as string | undefined) ?? null;
+      }
+      if (!wardId) return res.json({ leaderboard: [] });
+
+      const { data } = await db
+        .from('v_ward_leaderboard')
+        .select('*')
+        .eq('ward_id', wardId)
+        .order('credits', { ascending: false })
+        .order('sort_order', { ascending: true })
+        .limit(12);
+
+      const leaderboard = (data ?? []).slice(0, 8).map((r: any, i: number) => ({
+        rank: i + 1,
+        householdCode: r.household_ref,
+        society: r.society,
+        streak: r.streak,
+        credits: r.credits,
+      }));
+      return res.json({ leaderboard });
+    } catch (e: any) {
+      return fail(res, e.status ?? 500, e.message ?? 'ward leaderboard error');
+    }
+  });
+
+  // ---------------------------------------------------------------------------------
   // Household onboarding for the auth-on path. A signed-in resident with no household
   // either creates one (and gets a code to share with family) or joins an existing one
   // by code. Everyone on one household shares its balance + the per-household daily

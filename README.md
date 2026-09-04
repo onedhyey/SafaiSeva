@@ -7,10 +7,12 @@ A mobile web app that rewards households for separating their waste — and pays
 Set up separate bins at home, then photograph your sorted streams at handover. A vision model checks what's actually in the frame; the backend decides the outcome. Reaching 2 / 4 / 6 bins pays a one‑time bonus, each verified handover pays 1 leaf per confirmed stream (2–4), and 20 leaves is a free ride on Janmarg BRTS or the Ahmedabad Metro.
 
 > **State of the build:** the resident loop — bin onboarding, handover verification, the
-> credit ledger with a 24 h hold, and ticket redemption — runs against a real Supabase
-> backend with a real Gemini vision check and server‑side fraud checks. The karmachari and
-> ward‑officer screens still read seeded data. See **[ARCHITECTURE.md](ARCHITECTURE.md)**
-> and **[GOVERNMENT_INTEGRATION.md](GOVERNMENT_INTEGRATION.md)**.
+> credit ledger with a 24 h hold, ticket redemption, the ward leaderboard, and an offline
+> capture queue — runs against a real Supabase backend with a real Gemini vision check and
+> server‑side fraud checks. The karmachari review queue / doorstep issuance and the ward‑
+> officer dashboard are server‑backed too; only a few counters (karmachari daily tallies)
+> and the collection‑window / geofence‑polygon placeholders still await AMC data. See
+> **[ARCHITECTURE.md](ARCHITECTURE.md)** and **[GOVERNMENT_INTEGRATION.md](GOVERNMENT_INTEGRATION.md)**.
 
 ---
 
@@ -128,7 +130,8 @@ permission; there is deliberately no file‑upload fallback.
    gets *"the image does not contain identifiable waste"*.
 3. **Rewards** → redeem 20 leaves → the QR ticket modal with the signed token, cost and
    24 h validity. Balance drops live.
-4. Switch to **Karmachari** / **Ward Officer** to show those views (seeded data).
+4. Switch to **Karmachari** / **Ward Officer** to show those views (backend‑driven; the
+   demo data is seeded at migration time and overlaid with live activity).
 
 ## Current state — what's real and what isn't
 
@@ -142,8 +145,9 @@ permission; there is deliberately no file‑upload fallback.
 | Resident dispute → routes to human review | **real** — `POST /api/handovers/:id/dispute` |
 | Geofence polygon | **ward bounding box** until AMC supplies polygons (G1) |
 | Collection window | placeholder 6 AM–12 PM until real route schedules (G4) |
-| Karmachari review queue, manual issuance | **seeded / local** — needs server roles (G3, I7) |
+| Karmachari review queue + doorstep issuance | **real** — `resolveWorker` + `GET /api/review-queue`, `POST /api/review-queue/:id/decide`, `POST /api/worker/issue` (shipped `64ac176`). Roster is one seeded worker until AMC HR data (G3) |
 | Ward Officer dashboard + anomalies | **real** — `resolveOfficer` + `GET /api/officer/{dashboard,anomalies}` (schema `0015`+`0016`); seed is the offline fallback |
+| Resident ward leaderboard (Impact tab) | **real** — `GET /api/ward/leaderboard` (schema `0017`); baseline overlaid with live settled balances |
 | Authentication | **off** by design — anonymous per‑device session. Clerk is wired and dormant; flip `VITE_AUTH_ENABLED`. See ARCHITECTURE.md |
 | Offline capture queue | **real** — documented handovers queue on‑device (`idb-keyval`) and replay to the verify endpoint when back online; idempotent, with an Outbox screen (P6 / T3.1) |
 

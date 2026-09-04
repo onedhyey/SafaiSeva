@@ -339,3 +339,16 @@ export function getOfficerDashboard(): Promise<OfficerDashboard> {
 export function getOfficerAnomalies(): Promise<{ anomalies: OfficerAnomaly[] }> {
   return apiFetch<{ anomalies: OfficerAnomaly[] }>('/api/officer/anomalies', { asOfficer: true });
 }
+
+// ---- Resident ward leaderboard (Impact tab; schema 0017) ----
+export interface LeaderboardEntry {
+  rank: number;
+  householdCode: string;
+  society: string;
+  streak: number;
+  credits: number;
+}
+
+export function getWardLeaderboard(): Promise<{ leaderboard: LeaderboardEntry[] }> {
+  return apiFetch<{ leaderboard: LeaderboardEntry[] }>('/api/ward/leaderboard');
+}

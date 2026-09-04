@@ -57,10 +57,11 @@ backfilled with one row per file (`version` = `0001`…`0014`) — the effect of
 `supabase migration repair --status applied 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012 0013 0014`
 — so a fresh clone's `supabase db push` / `supabase migration list` see all 14 as applied.
 
-`0015_ward_officers.sql` and `0016_officer_analytics.sql` (Tier 2 / G7 — Ward Officer as a
-real server principal) were applied via the Management API on 2026-09-04 with their
-`schema_migrations` rows inserted (`('0015','ward_officers')`, `('0016','officer_analytics')`).
-The live tracker now lists `0001`–`0016` as applied.
+`0015_ward_officers.sql`, `0016_officer_analytics.sql` (Tier 2 / G7 — Ward Officer as a
+real server principal) and `0017_ward_leaderboard.sql` (Tier 3 / F1 — resident Impact-tab
+leaderboard off seed) were applied via the Management API on 2026-09-04 with their
+`schema_migrations` rows inserted (`('0015','ward_officers')`, `('0016','officer_analytics')`,
+`('0017','ward_leaderboard')`). The live tracker now lists `0001`–`0017` as applied.
 
 Every file is **idempotent** (safe to replay against a partially- or fully-migrated DB):
 `create … if not exists`, `create or replace`, `drop … if exists` before each
