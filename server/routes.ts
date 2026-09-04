@@ -4,7 +4,7 @@
 
 import type { Express, Request, Response } from 'express';
 import { admin } from './supabaseAdmin.ts';
-import { resolvePrincipal, resolveWorker } from './principal.ts';
+import { resolvePrincipal, resolveWorker, resolveOfficer } from './principal.ts';
 import { dHash, sha256, decodeDataUrl } from './phash.ts';
 import { extractFromPhoto, extractFromVideo } from './gemini.ts';
 import { runFraudChecks, istDate, workerCapExceeded } from './fraud.ts';
@@ -818,6 +818,101 @@ export function mountApiRoutes(app: Express) {
       return res.json({ householdCode: code, creditsAwarded: credits });
     } catch (e: any) {
       return fail(res, e.status ?? 500, e.message ?? 'issue error');
+    }
+  });
+
+  // ---------------------------------------------------------------------------------
+  // Ward Officer — read-only ward oversight (audit G7, schema 0015 + 0016). The officer
+  // is a real server principal (resolveOfficer); every figure comes from the officer
+  // analytics views, ward-scoped. No mutating officer endpoint exists by design.
+  // ---------------------------------------------------------------------------------
+
+  // GET /api/officer/dashboard — the whole officer screen except anomalies:
+  // KPI header, AI verification split, sub-district participation, karmachari audit.
+  app.get('/api/officer/dashboard', readLimiter, async (req: Request, res: Response) => {
+    try {
+      const officer = await resolveOfficer(req);
+      if (!officer.wardId) return fail(res, 409, 'This officer is not assigned to a ward.');
+      const db = admin();
+
+      const [{ data: kpi }, { data: subs }, { data: audit }] = await Promise.all([
+        db.from('v_officer_dashboard').select('*').eq('ward_id', officer.wardId).maybeSingle(),
+        db.from('v_officer_subdistricts').select('*').eq('ward_id', officer.wardId).order('sort_order'),
+        db.from('v_officer_worker_audit').select('*').eq('ward_id', officer.wardId).order('sort_order'),
+      ]);
+      if (!kpi) return fail(res, 404, 'No analytics baseline for this ward yet.');
+
+      const band = (participation: number, target: number): 'optimal' | 'attention' | 'low' => {
+        if (target <= 0) return 'attention';
+        const r = participation / target;
+        return r >= 1 ? 'optimal' : r >= 0.93 ? 'attention' : 'low';
+      };
+      const rupeePerCredit =
+        kpi.credits_issued_baseline > 0
+          ? kpi.rupee_value_baseline / kpi.credits_issued_baseline
+          : 5;
+
+      return res.json({
+        wardName: kpi.ward_name,
+        householdsEnrolled: kpi.households_enrolled,
+        participationRateThisWeek: Number(kpi.participation_this_week),
+        participationRateLastWeek: Number(kpi.participation_last_week),
+        creditsIssued: kpi.credits_issued_live,
+        rupeeValue: Math.round(kpi.credits_issued_live * rupeePerCredit),
+        aiSplit: {
+          approved: Number(kpi.ai_approved_pct),
+          inReview: Number(kpi.ai_in_review_pct),
+          rejected: Number(kpi.ai_rejected_pct),
+        },
+        subDistricts: (subs ?? []).map((s: any) => ({
+          name: s.name,
+          households: s.households,
+          participation: Number(s.participation),
+          status: band(Number(s.participation), Number(s.target_participation)),
+        })),
+        karmacharis: (audit ?? []).map((k: any) => ({
+          id: k.audit_ref,
+          name: k.name,
+          route: k.route,
+          reviewsDone: k.reviews_done,
+          overrides: k.overrides,
+          overrideRate: k.reviews_done > 0 ? Math.round((k.overrides / k.reviews_done) * 1000) / 10 : 0,
+          flagged: k.flagged,
+          ...(k.flag_reason ? { flagReason: k.flag_reason } : {}),
+        })),
+      });
+    } catch (e: any) {
+      return fail(res, e.status ?? 500, e.message ?? 'officer dashboard error');
+    }
+  });
+
+  // GET /api/officer/anomalies — curated + live-derived algorithmic flags for the ward.
+  app.get('/api/officer/anomalies', readLimiter, async (req: Request, res: Response) => {
+    try {
+      const officer = await resolveOfficer(req);
+      if (!officer.wardId) return fail(res, 409, 'This officer is not assigned to a ward.');
+
+      const { data } = await admin()
+        .from('v_officer_anomalies')
+        .select('*')
+        .eq('ward_id', officer.wardId);
+
+      const rank = { high: 0, medium: 1 } as const;
+      const anomalies = (data ?? [])
+        .map((a: any) => ({
+          householdId: a.household_ref,
+          name: a.name,
+          address: a.address,
+          approvalRate: Number(a.approval_rate),
+          totalSubmissions: a.total_submissions,
+          flagReason: a.flag_reason,
+          severity: (a.severity === 'high' ? 'high' : 'medium') as 'high' | 'medium',
+        }))
+        .sort((x, y) => rank[x.severity] - rank[y.severity] || y.totalSubmissions - x.totalSubmissions);
+
+      return res.json({ anomalies });
+    } catch (e: any) {
+      return fail(res, e.status ?? 500, e.message ?? 'officer anomalies error');
     }
   });
 

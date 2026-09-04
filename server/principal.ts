@@ -263,3 +263,52 @@ export async function resolveWorker(req: Request): Promise<WorkerPrincipal> {
     dailyIssueCap: w.daily_issue_cap ?? 25,
   };
 }
+
+export interface OfficerPrincipal {
+  userId: string | null;
+  officerId: string;
+  officerCode: string;
+  name: string;
+  wardId: string | null;
+}
+
+/**
+ * The ward-officer counterpart of resolveWorker (audit G7, schema 0015_ward_officers).
+ * An officer oversees a ward's aggregates and never documents handovers, so this only
+ * needs to answer "which ward does this principal supervise?".
+ *
+ *   auth OFF (demo) : client that has taken the Officer role sends
+ *                     `x-demo-officer: <officer_code>` -> seeded ward_officers row.
+ *   auth ON  (later): map the Clerk principal to its own ward_officers row by user_id.
+ *
+ * Same downstream shape either way, so the officer routes don't branch on auth mode.
+ */
+export async function resolveOfficer(req: Request): Promise<OfficerPrincipal> {
+  const db = admin();
+  const deny = (msg: string) => {
+    const e: any = new Error(msg);
+    e.status = 403;
+    return e;
+  };
+
+  let query;
+  if (env.authEnabled) {
+    const principal = await resolvePrincipal(req);
+    query = db.from('ward_officers').select('*').eq('user_id', principal.userId);
+  } else {
+    const code = (req.header('x-demo-officer') || '').trim();
+    if (!code) throw deny('Ward Officer role required for this action.');
+    query = db.from('ward_officers').select('*').eq('officer_code', code);
+  }
+
+  const { data: o } = await query.eq('active', true).maybeSingle();
+  if (!o) throw deny('No active ward officer record for this session.');
+
+  return {
+    userId: o.user_id ?? null,
+    officerId: o.id,
+    officerCode: o.officer_code,
+    name: o.name,
+    wardId: o.ward_id ?? null,
+  };
+}

@@ -21,7 +21,7 @@ import {
   resetDatabase,
 } from './lib/db';
 import { useAuth } from './lib/authContext';
-import { getWallet, BinsInfo } from './lib/api';
+import { getWallet, getOfficerDashboard, getOfficerAnomalies, BinsInfo } from './lib/api';
 import { serverHandoverToRecord, serverTicketToRecord } from './lib/serverMap';
 import { BinSetupModal } from './components/resident/BinSetupModal';
 import { RoleSwitcher } from './components/RoleSwitcher';
@@ -91,9 +91,9 @@ export default function App() {
     }
   }, [currentTheme]);
 
-  // Load app data. The resident wallet (balance + handover history) is served by the
-  // backend (Phase 2); rewards/tickets, karmachari and officer screens still read the
-  // local seed and migrate in Phase 3.
+  // Load app data. The resident wallet (balance + handover history), the karmachari
+  // review queue, and the ward officer dashboard are all backend-served; the seed is
+  // now only the offline fallback plus a few not-yet-migrated bits (resident leaderboard).
   const loadData = useCallback(async () => {
     try {
       const [hh, hnds, tkts, karm, ward, sett] = await Promise.all([
@@ -138,11 +138,37 @@ export default function App() {
         console.warn('Wallet API unavailable — showing local state only.', e);
       }
 
+      // Ward Officer screen is backend-driven (schema 0015 + 0016). Overlay the server
+      // aggregates onto the seed; the seed remains the fallback if the API is unreachable
+      // and still supplies `leaderboard` (a resident/ImpactView concern).
+      let mergedWardStats = ward;
+      try {
+        const [dash, anom] = await Promise.all([
+          getOfficerDashboard(),
+          getOfficerAnomalies(),
+        ]);
+        mergedWardStats = {
+          ...ward,
+          wardName: dash.wardName,
+          householdsEnrolled: dash.householdsEnrolled,
+          participationRateThisWeek: dash.participationRateThisWeek,
+          participationRateLastWeek: dash.participationRateLastWeek,
+          creditsIssued: dash.creditsIssued,
+          rupeeValue: dash.rupeeValue,
+          aiSplit: dash.aiSplit,
+          subDistricts: dash.subDistricts,
+          karmacharis: dash.karmacharis,
+          anomalies: anom.anomalies,
+        };
+      } catch (e) {
+        console.warn('Officer API unavailable — using seeded ward stats.', e);
+      }
+
       setHousehold(mergedHousehold);
       setHandovers(mergedHandovers);
       setTickets(mergedTickets);
       setKarmachari(karm);
-      setWardStats(ward);
+      setWardStats(mergedWardStats);
       setSettings(sett);
     } catch (err) {
       console.error('Failed to load SafaiSeva state:', err);

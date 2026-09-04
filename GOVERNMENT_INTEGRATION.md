@@ -51,10 +51,10 @@ queue can be trusted.
 **Stub today:** `public.workers` is seeded with one worker. As of `64ac176` the Karmachari
 role IS server‑side: `server/principal.ts` → `resolveWorker(req)` gates
 `GET /api/review-queue`, `POST /api/review-queue/:id/decide` and `POST /api/worker/issue`
-(demo: `x-demo-worker` header; the Clerk principal when auth is on). Still stubbed: the
-**roster** (one seeded row, no real routes / shifts), and the Ward Officer role — no
-server side yet (see G7). The client role picker (`RoleSelectionModal`) still uses mock
-access codes.
+(demo: `x-demo-worker` header; the Clerk principal when auth is on). As of `0015` +
+`0016` the Ward Officer role is server‑side too (see G7). Still stubbed: the **roster**
+(one seeded row, no real routes / shifts). The client role picker (`RoleSelectionModal`)
+still uses mock access codes.
 
 **Plug‑in:** load `workers`; when authentication is enabled (see `ARCHITECTURE.md`), map
 the signed‑in principal to a `workers` row and gate the review / issuance API to it.
@@ -113,13 +113,20 @@ target for the fraction routed to `in_review`.
 **Needed:** who may see ward‑wide dashboards and anomaly data, and any link to the
 existing notice / enforcement system.
 
-**Stub today:** the Ward Officer view is a client role toggle over **entirely seeded**
-ward stats, leaderboard and anomaly lists (`src/lib/seed.ts`). No server aggregates.
+**Server‑side today:** `0015_ward_officers.sql` adds the `ward_officers` table (+ demo
+officer Anjali Desai / `AMC-WO-12`, Ward 12); `server/principal.ts` → `resolveOfficer(req)`
+mirrors `resolveWorker` (demo: `x-demo-officer` header; Clerk principal when auth is on)
+and gates `GET /api/officer/dashboard` and `GET /api/officer/anomalies`, both ward‑scoped.
+`0016_officer_analytics.sql` backs those with real tables + views (`sub_districts`,
+`ward_officer_baseline`, `officer_worker_audit`, `officer_anomaly` → `v_officer_*`): each
+view exposes an imported baseline column alongside a live‑computed one (ledger inflows
+since the snapshot, live handover status counts, live participation from household
+assignment, live `fraud_flags` rollups), and the API prefers the live figure once its
+volume is credible. `src/lib/seed.ts` `wardStats` is now only the offline fallback.
 
-**Plug‑in:** server‑side officer role (with auth), and real aggregate views over
-`handovers` / `credit_ledger` / `fraud_flags`. In progress: `0015_ward_officers.sql`
-(`ward_officers` table + demo officer) and a `resolveOfficer(req)` seam mirroring
-`resolveWorker`, feeding `GET /api/officer/{dashboard,leaderboard,anomalies}`.
+**Still to plug in:** a real household roster so the live columns dominate; per‑worker
+route/shift data so the audit table isn't a snapshot; wiring `RoleSelectionModal`'s
+officer code to real credentials when auth is enabled.
 
 ---
 

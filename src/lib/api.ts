@@ -105,8 +105,15 @@ export interface VerifyResponse {
 // principal's own `workers` row instead and this header is ignored (see server/principal.ts).
 export const DEMO_WORKER_CODE = 'AMC-WZ-109';
 
-async function apiFetch<T>(path: string, init: RequestInit & { asWorker?: boolean } = {}): Promise<T> {
-  const { asWorker, ...rest } = init;
+// Demo-only: the seeded ward officer. When auth is enabled the officer routes map the
+// Clerk principal to its own `ward_officers` row instead and this header is ignored.
+export const DEMO_OFFICER_CODE = 'AMC-WO-12';
+
+async function apiFetch<T>(
+  path: string,
+  init: RequestInit & { asWorker?: boolean; asOfficer?: boolean } = {}
+): Promise<T> {
+  const { asWorker, asOfficer, ...rest } = init;
   // When auth is on, the Clerk session token is present and the server prefers it;
   // the device id is still sent so an anonymous session can be claimed on first sign-in.
   const token = await getAuthToken();
@@ -117,6 +124,7 @@ async function apiFetch<T>(path: string, init: RequestInit & { asWorker?: boolea
       'x-device-id': getDeviceId(),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(asWorker ? { 'x-demo-worker': DEMO_WORKER_CODE } : {}),
+      ...(asOfficer ? { 'x-demo-officer': DEMO_OFFICER_CODE } : {}),
       ...(init.headers || {}),
     },
   });
@@ -281,4 +289,53 @@ export function workerIssue(payload: {
     asWorker: true,
     body: JSON.stringify(payload),
   });
+}
+
+// ---- Ward Officer (read-only ward oversight; schema 0015 + 0016) ----
+export interface OfficerSubDistrict {
+  name: string;
+  households: number;
+  participation: number;
+  status: 'optimal' | 'attention' | 'low';
+}
+
+export interface OfficerKarmachari {
+  id: string;
+  name: string;
+  route: string;
+  reviewsDone: number;
+  overrides: number;
+  overrideRate: number;
+  flagged: boolean;
+  flagReason?: string;
+}
+
+export interface OfficerDashboard {
+  wardName: string;
+  householdsEnrolled: number;
+  participationRateThisWeek: number;
+  participationRateLastWeek: number;
+  creditsIssued: number;
+  rupeeValue: number;
+  aiSplit: { approved: number; inReview: number; rejected: number };
+  subDistricts: OfficerSubDistrict[];
+  karmacharis: OfficerKarmachari[];
+}
+
+export interface OfficerAnomaly {
+  householdId: string;
+  name: string;
+  address: string;
+  approvalRate: number;
+  totalSubmissions: number;
+  flagReason: string;
+  severity: 'high' | 'medium';
+}
+
+export function getOfficerDashboard(): Promise<OfficerDashboard> {
+  return apiFetch<OfficerDashboard>('/api/officer/dashboard', { asOfficer: true });
+}
+
+export function getOfficerAnomalies(): Promise<{ anomalies: OfficerAnomaly[] }> {
+  return apiFetch<{ anomalies: OfficerAnomaly[] }>('/api/officer/anomalies', { asOfficer: true });
 }
