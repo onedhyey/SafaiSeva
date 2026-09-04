@@ -63,8 +63,9 @@ resident / karmachari / officer picker.
 
 The whole seam is one function: `server/principal.ts` → `resolvePrincipal(req)` returns
 `{ userId }` from **either** an `x-device-id` header (demo) **or** a Clerk bearer token
-(`resolveClerk()` is stubbed — install `@clerk/backend`, verify the token, map `sub` →
-`users.clerk_user_id`). Every RLS policy calls `app.uid()`, which resolves a request from
+(`resolveClerk()` verifies it with `@clerk/backend` and maps `sub` → `users.clerk_user_id`,
+get-or-creating the row — complete as of `303be71`; enabling it is `VITE_AUTH_ENABLED=true` +
+rebuild). Every RLS policy calls `app.uid()`, which resolves a request from
 `users.clerk_user_id` **or** `users.device_id` — so turning auth on needs no schema
 change and no query rewrite.
 
@@ -77,9 +78,9 @@ change and no query rewrite.
 | Bin onboarding + milestone credits | **server** |
 | Ticket redemption + `spend` ledger + signed QR | **server** |
 | Resident dispute → routes handover to `in_review` | **server** (`POST /api/handovers/:id/dispute`) |
-| Karmachari review queue (approve / reject) | local seed — needs server roles (G3) |
-| Ward Officer dashboard, leaderboard, anomalies | local seed fiction (G7) |
-| Manual "issue credit without app" | local — `workerCapExceeded()` helper exists, no route yet (I7) |
+| Karmachari review queue (approve / reject) | **server** (`GET /api/review-queue`, `POST /api/review-queue/:id/decide`) — shipped `64ac176` |
+| Manual "issue credit without app" | **server** (`POST /api/worker/issue`, daily cap via `workerCapExceeded()`) — shipped `64ac176` |
+| Ward Officer dashboard, leaderboard, anomalies | local seed fiction (`src/lib/seed.ts`) — server officer role + aggregate endpoints to build (G7) |
 | Offline capture queue | not built (P6) |
 
 ## Key files
@@ -99,7 +100,7 @@ src/lib/verification/
   contract.ts       evidence + decision + reward-rules types
   reasonCodes.ts    reason enum → EN + Gujarati messages + "what to change"
   adjudicator.ts    the pure decision function (14 unit tests: npm test)
-supabase/migrations/  0001..0014  (see supabase/README.md)
+supabase/migrations/  0001..0015  (see supabase/README.md)
 ```
 
 ## Running it
