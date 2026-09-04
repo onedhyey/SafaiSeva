@@ -22,11 +22,15 @@ import {
   Play,
   Pause,
   RotateCcw,
+  CloudOff,
+  UploadCloud,
   Edit3,
 } from 'lucide-react';
 import { LeafGlyph } from '../LeafGlyph';
 import { LocationPickerModal } from '../LocationPickerModal';
-import { analyse, analyseVideo } from '../../lib/verification';
+import { analyse, analyseVideo, OfflineSubmitError, checklistToArray } from '../../lib/verification';
+import { dataUrlToBlob } from '../../lib/api';
+import { enqueueCapture } from '../../lib/offlineQueue';
 import { coordLabel, reverseGeocode } from '../../lib/geocode';
 
 interface DocumentViewProps {
@@ -35,6 +39,10 @@ interface DocumentViewProps {
   aiOverride?: DemoOutcomeOverride;
   onRefreshData?: () => Promise<void>;
   onCancel: () => void;
+  /** When true, submissions are saved to the offline queue instead of sent (T3.1). */
+  isOffline?: boolean;
+  /** Called after a capture has been added to the offline queue. */
+  onQueued?: () => void;
   onSubmit?: (data: {
     photoUrl: string;
     streams: StreamChecklist;
@@ -49,6 +57,7 @@ type DocumentStep =
   | 'low_confidence'
   | 'video_record'
   | 'video_verifying'
+  | 'queued'
   | 'result';
 
 export const DocumentView: React.FC<DocumentViewProps> = ({
@@ -57,6 +66,8 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
   aiOverride = 'auto' as DemoOutcomeOverride,
   onRefreshData,
   onCancel,
+  isOffline = false,
+  onQueued,
   onSubmit,
 }) => {
   const [step, setStep] = useState<DocumentStep>('camera');
@@ -418,9 +429,36 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
     if (keyframeTimerRef.current) clearInterval(keyframeTimerRef.current);
   };
 
+  // Save the current capture to the offline queue (audit P6 / T3.1). Reused both when we
+  // already know we're offline and when a submit attempt hits a network error mid-flight.
+  const queueCapture = async (attempt: 1 | 2) => {
+    const capturedAt = new Date().toISOString();
+    await enqueueCapture({
+      householdId: household.id,
+      attempt,
+      declaredStreams: checklistToArray(streams),
+      photoBlob: attempt === 1 && photoUrl ? dataUrlToBlob(photoUrl) : undefined,
+      videoBlob: attempt === 2 ? recordedVideoBlob ?? undefined : undefined,
+      videoFrames: attempt === 2 ? videoKeyframes : undefined,
+      clientCapturedAt: capturedAt,
+      clientLat: location?.lat ?? null,
+      clientLng: location?.lng ?? null,
+      clientAccuracyM: location?.accuracyMeters ?? null,
+      handoverId: attempt === 2 ? handoverId || undefined : undefined,
+    });
+    onQueued?.();
+    setStep('queued');
+  };
+
   // Stage 1: Verify captured photo with the AI vision check
   const handleVerifyPhoto = async () => {
     if (!photoUrl) return;
+
+    // No connectivity: stash the capture and let the Outbox send it later.
+    if (isOffline) {
+      await queueCapture(1);
+      return;
+    }
 
     setStep('verifying');
     setCurrentStageIndex(0);
@@ -469,9 +507,13 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
         setStep('result');
       }, 2200);
     } catch (err) {
-      console.error('Verification analysis error:', err);
       clearTimeout(t1);
       clearTimeout(t2);
+      if (err instanceof OfflineSubmitError) {
+        await queueCapture(1);
+        return;
+      }
+      console.error('Verification analysis error:', err);
       setStep('result');
     }
   };
@@ -479,6 +521,11 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
   // Stage 2: Verify captured video with the AI vision check
   const handleVerifyVideo = async () => {
     if (!recordedVideoBase64 && (!videoKeyframes || videoKeyframes.length === 0)) return;
+
+    if (isOffline) {
+      await queueCapture(2);
+      return;
+    }
 
     setStep('video_verifying');
     setCurrentStageIndex(0);
@@ -526,9 +573,13 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
         setStep('result');
       }, 2500);
     } catch (err) {
-      console.error('Video verification error:', err);
       clearTimeout(t1);
       clearTimeout(t2);
+      if (err instanceof OfflineSubmitError) {
+        await queueCapture(2);
+        return;
+      }
+      console.error('Video verification error:', err);
       setStep('result');
     }
   };
@@ -1349,6 +1400,67 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 );
               })}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* STEP 6b: SAVED OFFLINE — queued for upload (T3.1)          */}
+      {/* ========================================================= */}
+      {step === 'queued' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between px-1">
+            <div>
+              <h1 className="text-sm font-semibold text-white">Saved for upload</h1>
+              <p className="text-xs text-muted-l">No connection right now — nothing lost</p>
+            </div>
+            <div className="font-mono text-[11px] text-amber bg-amber/10 px-2 py-0.5 rounded-sm border border-amber/30">
+              QUEUED
+            </div>
+          </div>
+
+          <div className="relative rounded-lg overflow-hidden bg-ink aspect-[4/3] border border-muted/30 shadow-md">
+            <img
+              src={photoUrl || recordedVideoUrl || videoKeyframes[0]}
+              alt="Queued handover capture"
+              className="w-full h-full object-contain opacity-80"
+            />
+            <div className="absolute inset-0 pointer-events-none p-3">
+              <div className="w-full h-full border-2 border-amber/70 bg-amber/5 rounded-md" />
+            </div>
+          </div>
+
+          <div className="rounded-lg p-4 border bg-amber/10 border-amber/40 text-tint space-y-2.5 shadow-sm">
+            <div className="flex items-center gap-2">
+              <CloudOff size={20} className="text-amber shrink-0" />
+              <span className="text-sm font-bold uppercase tracking-wide text-amber">
+                Handover queued
+              </span>
+            </div>
+            <p className="text-xs leading-relaxed text-muted-l">
+              Your photo and the streams you declared are stored on this device. SafaiSeva
+              will send this handover for verification automatically as soon as you’re back
+              online — you don’t need to re-capture anything.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="w-full bg-green hover:bg-[#16934f] text-ink font-semibold text-sm py-3.5 px-4 rounded-md transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs min-h-[48px]"
+            >
+              <UploadCloud size={16} />
+              <span>Done — back to Wallet</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleRetake}
+              className="w-full bg-ink-soft hover:bg-muted/20 border border-muted/30 text-muted-l hover:text-white font-medium text-xs py-2.5 px-4 rounded-md transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Camera size={13} />
+              <span>Document another handover</span>
+            </button>
           </div>
         </div>
       )}

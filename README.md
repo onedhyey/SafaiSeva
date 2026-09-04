@@ -143,9 +143,9 @@ permission; there is deliberately no file‑upload fallback.
 | Geofence polygon | **ward bounding box** until AMC supplies polygons (G1) |
 | Collection window | placeholder 6 AM–12 PM until real route schedules (G4) |
 | Karmachari review queue, manual issuance | **seeded / local** — needs server roles (G3, I7) |
-| Ward Officer dashboard, leaderboard, anomalies | **seeded fiction** (G7) |
+| Ward Officer dashboard + anomalies | **real** — `resolveOfficer` + `GET /api/officer/{dashboard,anomalies}` (schema `0015`+`0016`); seed is the offline fallback |
 | Authentication | **off** by design — anonymous per‑device session. Clerk is wired and dormant; flip `VITE_AUTH_ENABLED`. See ARCHITECTURE.md |
-| Offline capture queue | **not built** (P6) |
+| Offline capture queue | **real** — documented handovers queue on‑device (`idb-keyval`) and replay to the verify endpoint when back online; idempotent, with an Outbox screen (P6 / T3.1) |
 
 `Settings → Reset local demo data` clears this device's cache; it does not touch the server.
 

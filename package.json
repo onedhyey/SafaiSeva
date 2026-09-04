@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx tests/adjudicator.test.mjs",
+    "test": "tsx tests/adjudicator.test.mjs && tsx tests/offlineQueue.test.mjs",
     "test:auth": "npm run build && node scripts/auth-smoke.mjs",
     "link-worker": "node scripts/link-worker.mjs"
   },

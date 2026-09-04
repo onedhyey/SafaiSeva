@@ -81,7 +81,7 @@ change and no query rewrite.
 | Karmachari review queue (approve / reject) | **server** (`GET /api/review-queue`, `POST /api/review-queue/:id/decide`) — shipped `64ac176` |
 | Manual "issue credit without app" | **server** (`POST /api/worker/issue`, daily cap via `workerCapExceeded()`) — shipped `64ac176` |
 | Ward Officer dashboard + anomalies | **server** (`resolveOfficer`, `GET /api/officer/dashboard`, `GET /api/officer/anomalies`; schema `0015` + `0016`) — seed is offline fallback only |
-| Offline capture queue | not built (P6) |
+| Offline capture queue | **client** (`src/lib/offlineQueue.ts` — `idb-keyval` store + idempotent replay via the verify endpoint's `idempotencyKey`; Outbox screen + `simulateOffline` toggle) — shipped (P6 / T3.1) |
 
 ## Key files
 
@@ -100,6 +100,9 @@ src/lib/verification/
   contract.ts       evidence + decision + reward-rules types
   reasonCodes.ts    reason enum → EN + Gujarati messages + "what to change"
   adjudicator.ts    the pure decision function (14 unit tests: npm test)
+src/lib/
+  offlineQueue.ts   offline capture queue: idb-keyval store + idempotent replay (P6)
+  useOnline.ts      navigator.onLine + online/offline events
 supabase/migrations/  0001..0016  (see supabase/README.md)
 ```
 
