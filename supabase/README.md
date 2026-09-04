@@ -70,9 +70,9 @@ constraint definitions, the 14 RLS policies (name / cmd / using / with-check), t
 functions, and the 4 triggers. `0008_storage.sql` (one `storage.buckets` upsert) is the
 only file not covered by that replay; it is a trivial idempotent insert.
 
-**Prerequisite for the CLI workflow:** the repo has no `supabase/config.toml` yet — run
-`supabase init` once and set `project_id = "vtqzyldosmpkxuqqlica"`, then the commands
-below work.
+**CLI prerequisite:** `supabase/config.toml` is committed (`supabase init`, CLI v2.116.0,
+`project_id = "vtqzyldosmpkxuqqlica"`, `major_version = 17`). Run `supabase link` to point
+the CLI at the project before `db push` / `db reset`.
 
 ## How to apply
 
