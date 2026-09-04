@@ -12,6 +12,7 @@ import {
   Download,
   Smartphone,
   Check,
+  CloudOff,
 } from 'lucide-react';
 import { DemoOutcomeOverride, HouseholdProfile, AppTheme } from '../types';
 import { usePwaInstall } from '../lib/usePwaInstall';
@@ -26,6 +27,8 @@ interface SettingsModalProps {
   theme: AppTheme;
   onUpdateTheme: (theme: AppTheme) => void;
   onResetDemo: () => Promise<void>;
+  simulateOffline: boolean;
+  onToggleOffline: (value: boolean) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -37,6 +40,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   theme,
   onUpdateTheme,
   onResetDemo,
+  simulateOffline,
+  onToggleOffline,
 }) => {
   const [resetting, setResetting] = useState(false);
   const [resetDone, setResetDone] = useState(false);
@@ -227,6 +232,49 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               location and time — there is no demo override. To see a rejection, submit
               something that isn’t segregated waste.
             </div>
+          </div>
+
+          {/* Connectivity — simulate offline for the capture queue (T3.1) */}
+          <div className="mt-4">
+            <label className="block text-xs font-semibold text-white mb-1.5">Connectivity</label>
+            <button
+              id="settings-simulate-offline-toggle"
+              onClick={() => onToggleOffline(!simulateOffline)}
+              className={`w-full flex items-center justify-between gap-3 p-3 rounded-lg border text-left transition-colors cursor-pointer ${
+                simulateOffline
+                  ? 'bg-amber-950/40 border-amber-700/60'
+                  : 'bg-zinc-950 border-zinc-800 hover:border-zinc-700'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div
+                  className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 ${
+                    simulateOffline
+                      ? 'bg-amber-900/50 border-amber-700/60 text-amber-400'
+                      : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+                  }`}
+                >
+                  <CloudOff size={15} />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-white">Simulate offline</div>
+                  <div className="text-[10px] text-zinc-400 leading-snug">
+                    Documented handovers go to the Outbox and send when you switch this back off.
+                  </div>
+                </div>
+              </div>
+              <span
+                className={`relative shrink-0 w-9 h-5 rounded-full transition-colors ${
+                  simulateOffline ? 'bg-amber-500' : 'bg-zinc-700'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                    simulateOffline ? 'translate-x-4' : ''
+                  }`}
+                />
+              </span>
+            </button>
           </div>
 
           {/* Reset local demo state */}

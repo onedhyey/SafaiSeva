@@ -23,6 +23,13 @@ import {
 import { useAuth } from './lib/authContext';
 import { getWallet, getOfficerDashboard, getOfficerAnomalies, BinsInfo } from './lib/api';
 import { serverHandoverToRecord, serverTicketToRecord } from './lib/serverMap';
+import { useOnline } from './lib/useOnline';
+import {
+  listQueue,
+  flushQueue,
+  removeFromQueue,
+  QueuedCapture,
+} from './lib/offlineQueue';
 import { BinSetupModal } from './components/resident/BinSetupModal';
 import { RoleSwitcher } from './components/RoleSwitcher';
 import { BottomNav, ResidentTab } from './components/BottomNav';
@@ -39,6 +46,7 @@ import { RewardsView } from './components/resident/RewardsView';
 import { ImpactView } from './components/resident/ImpactView';
 import { KarmachariView } from './components/karmachari/KarmachariView';
 import { WardOfficerView } from './components/officer/WardOfficerView';
+import { OutboxView } from './components/resident/OutboxView';
 
 export default function App() {
   const { isSignedIn, selectedRole, setSelectedRole, user, authEnabled, authGate } = useAuth();
@@ -73,7 +81,36 @@ export default function App() {
   // Server-backed reward costs (fallback to nothing until the wallet call returns)
   const [redeemCosts, setRedeemCosts] = useState<Record<string, number>>({});
 
+  // Offline capture queue (audit P6 / T3.1)
+  const browserOnline = useOnline();
+  const [queueItems, setQueueItems] = useState<QueuedCapture[]>([]);
+  // What DocumentView / the Outbox treat as "can't reach the server right now".
+  const effectiveOffline = !browserOnline || settings.simulateOffline;
+
   const currentTheme: AppTheme = settings.theme || 'light';
+
+  const refreshQueue = useCallback(async () => {
+    try {
+      setQueueItems(await listQueue());
+    } catch {
+      /* IndexedDB unavailable — leave the last known list */
+    }
+  }, []);
+
+  // Send everything queued. Returns how many were accepted so the caller can decide
+  // whether to refresh the wallet. flushQueue() has its own in-flight lock, so
+  // overlapping calls (e.g. React StrictMode double-invoke) are harmless no-ops.
+  const runFlush = useCallback(async (): Promise<number> => {
+    try {
+      const outcome = await flushQueue();
+      return outcome.sent.length;
+    } catch (e) {
+      console.warn('Offline queue flush failed:', e);
+      return 0;
+    } finally {
+      await refreshQueue();
+    }
+  }, [refreshQueue]);
 
   // Synchronize theme to document body & root html
   useEffect(() => {
@@ -187,6 +224,24 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [residentTab]);
 
+  // Offline capture queue (audit P6 / T3.1): load it once, and drain it whenever the
+  // effective-online state flips to true (real reconnect or the demo toggle switched off).
+  useEffect(() => {
+    refreshQueue();
+  }, [refreshQueue]);
+
+  useEffect(() => {
+    if (effectiveOffline) return;
+    // Not abandoned on cleanup: App never unmounts, the flush must run to completion,
+    // and flushQueue()'s own lock makes a duplicate invocation a no-op.
+    (async () => {
+      if ((await listQueue()).length === 0) return;
+      const sent = await runFlush();
+      if (sent > 0) await loadData();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveOffline]);
+
   // Handle Role Switch
   const handleRoleChange = (newRole: Role) => {
     setSelectedRole(newRole);
@@ -209,6 +264,14 @@ export default function App() {
   // Update Theme Mode
   const handleUpdateTheme = async (newTheme: AppTheme) => {
     const updated = { ...settings, theme: newTheme };
+    setSettings(updated);
+    await saveDemoSettings(updated);
+  };
+
+  // Demo: force the app offline so the capture queue can be shown (T3.1). Turning it
+  // back off lets the auto-flush effect drain whatever was queued.
+  const handleToggleOffline = async (value: boolean) => {
+    const updated = { ...settings, simulateOffline: value };
     setSettings(updated);
     await saveDemoSettings(updated);
   };
@@ -305,8 +368,11 @@ export default function App() {
                       household={activeHousehold}
                       handovers={handovers}
                       bins={bins}
+                      outboxCount={queueItems.length}
+                      offline={effectiveOffline}
                       onOpenBinSetup={() => setBinModalOpen(true)}
                       onNavigateToDocument={() => setResidentTab('document')}
+                      onNavigateToOutbox={() => setResidentTab('outbox')}
                       onSelectHandover={(h) => setSelectedHandover(h)}
                     />
                   )}
@@ -316,8 +382,30 @@ export default function App() {
                       household={activeHousehold}
                       handovers={handovers}
                       aiOverride={settings.aiOutcomeOverride}
+                      isOffline={effectiveOffline}
+                      onQueued={refreshQueue}
                       onRefreshData={loadData}
                       onCancel={() => setResidentTab('wallet')}
+                    />
+                  )}
+
+                  {residentTab === 'outbox' && (
+                    <OutboxView
+                      items={queueItems}
+                      online={!effectiveOffline}
+                      onBack={() => setResidentTab('wallet')}
+                      onRetryAll={async () => {
+                        const sent = await runFlush();
+                        if (sent > 0) await loadData();
+                      }}
+                      onRetryOne={async () => {
+                        const sent = await runFlush();
+                        if (sent > 0) await loadData();
+                      }}
+                      onDelete={async (id) => {
+                        await removeFromQueue(id);
+                        await refreshQueue();
+                      }}
                     />
                   )}
 
@@ -388,6 +476,8 @@ export default function App() {
         theme={currentTheme}
         onUpdateTheme={handleUpdateTheme}
         onResetDemo={handleResetDemo}
+        simulateOffline={settings.simulateOffline}
+        onToggleOffline={handleToggleOffline}
       />
 
       {/* Transit Ticket View Modal */}

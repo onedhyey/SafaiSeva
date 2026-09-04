@@ -1,7 +1,9 @@
 import React from 'react';
 import { Wallet, Camera, Ticket, BarChart3 } from 'lucide-react';
 
-export type ResidentTab = 'wallet' | 'document' | 'rewards' | 'impact';
+// 'outbox' is a routable resident screen (reached from the wallet) but not a bottom-nav
+// tab, so it is absent from the `tabs` array below.
+export type ResidentTab = 'wallet' | 'document' | 'rewards' | 'impact' | 'outbox';
 
 interface BottomNavProps {
   currentTab: ResidentTab;

@@ -18,6 +18,20 @@ import {
   VerifyRequest,
   VerifyResponse,
 } from './api';
+import { isNetworkError } from './offlineQueue';
+
+/**
+ * Thrown by `analyse` / `analyseVideo` when the submission could not leave the device
+ * because of connectivity (the evidence upload or the verify call hit a network error).
+ * DocumentView catches this and puts the capture in the offline queue instead of
+ * showing a rejection (audit P6 / T3.1).
+ */
+export class OfflineSubmitError extends Error {
+  constructor(message = 'offline') {
+    super(message);
+    this.name = 'OfflineSubmitError';
+  }
+}
 
 export interface VerificationOptions {
   photo: string;
@@ -39,7 +53,7 @@ export interface VideoVerificationOptions {
   timestamp?: Date;
 }
 
-function checklistToArray(s: StreamChecklist): string[] {
+export function checklistToArray(s: StreamChecklist): string[] {
   return (['wet', 'dry', 'sanitary', 'special_care'] as const).filter((k) => s[k]);
 }
 
@@ -185,6 +199,7 @@ export async function analyse(options: VerificationOptions): Promise<Verificatio
     };
     return toResult(await verifyHandover(payload), 'photo');
   } catch (err: any) {
+    if (isNetworkError(err)) throw new OfflineSubmitError(err?.message);
     console.error('Photo verification error:', err);
     return errorResult(err.message || 'network error', 'photo');
   }
@@ -212,6 +227,7 @@ export async function analyseVideo(options: VideoVerificationOptions): Promise<V
     };
     return toResult(await verifyHandover(payload), 'video');
   } catch (err: any) {
+    if (isNetworkError(err)) throw new OfflineSubmitError(err?.message);
     console.error('Video verification error:', err);
     return errorResult(err.message || 'network error', 'video');
   }

@@ -1,15 +1,18 @@
 import React from 'react';
 import { HouseholdProfile, HandoverRecord } from '../../types';
 import { LeafGlyph } from '../LeafGlyph';
-import { Camera, Check, Clock, AlertCircle, ChevronRight, Flame, Trash2 } from 'lucide-react';
+import { Camera, Check, Clock, AlertCircle, ChevronRight, Flame, Trash2, CloudOff, UploadCloud } from 'lucide-react';
 import { BinsInfo } from '../../lib/api';
 
 interface WalletViewProps {
   household: HouseholdProfile;
   handovers: HandoverRecord[];
   bins?: BinsInfo | null;
+  outboxCount?: number;
+  offline?: boolean;
   onOpenBinSetup?: () => void;
   onNavigateToDocument: () => void;
+  onNavigateToOutbox?: () => void;
   onSelectHandover: (handover: HandoverRecord) => void;
 }
 
@@ -17,8 +20,11 @@ export const WalletView: React.FC<WalletViewProps> = ({
   household,
   handovers,
   bins,
+  outboxCount = 0,
+  offline = false,
   onOpenBinSetup,
   onNavigateToDocument,
+  onNavigateToOutbox,
   onSelectHandover,
 }) => {
   const nextRideTarget = 20;
@@ -45,6 +51,26 @@ export const WalletView: React.FC<WalletViewProps> = ({
           <span>{household.streakDays}-day streak</span>
         </div>
       </div>
+
+      {/* Offline / pending-upload strip (T3.1) */}
+      {(offline || outboxCount > 0) && (
+        <button
+          onClick={onNavigateToOutbox}
+          className={`w-full flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 border text-left transition-colors ${
+            outboxCount > 0
+              ? 'bg-amber/10 border-amber/35 text-amber hover:bg-amber/15'
+              : 'bg-ink-soft border-muted/30 text-muted-l hover:bg-muted/10'
+          }`}
+        >
+          {outboxCount > 0 ? <UploadCloud size={15} className="shrink-0" /> : <CloudOff size={15} className="shrink-0" />}
+          <span className="flex-1 text-xs font-medium">
+            {outboxCount > 0
+              ? `${outboxCount} handover${outboxCount === 1 ? '' : 's'} waiting to upload`
+              : 'You’re offline — handovers will be saved and sent later'}
+          </span>
+          <ChevronRight size={15} className="shrink-0 opacity-70" />
+        </button>
+      )}
 
       {/* Hero Wallet Card */}
       <div className="bg-ink-soft border border-muted/30 rounded-lg p-6 text-tint">
