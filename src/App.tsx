@@ -135,9 +135,9 @@ export default function App() {
     }
   }, [currentTheme]);
 
-  // Load app data. The resident wallet (balance + handover history), the karmachari
-  // review queue, and the ward officer dashboard are all backend-served; the seed is
-  // now only the offline fallback plus a few not-yet-migrated bits (resident leaderboard).
+  // Load app data. Wallet, karmachari console, ward officer dashboard, and the resident
+  // leaderboard are all backend-served now; `src/lib/seed.ts` is only the offline
+  // fallback each of those falls back to if its API call fails.
   const loadData = useCallback(async () => {
     try {
       const [hh, hnds, tkts, karm, ward, sett] = await Promise.all([
