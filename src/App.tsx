@@ -90,6 +90,9 @@ export default function App() {
   // Privacy notice (audit F8): the server refuses evidence until the current version is accepted.
   const [consent, setConsent] = useState<{ required: boolean; version: string } | null>(null);
   const [consentDismissed, setConsentDismissed] = useState<boolean>(false);
+  // Signed-in builds never show seeded numbers as if they were live (audit F14): on an API
+  // failure they show empty values and this message instead.
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Server-backed reward costs (fallback to nothing until the wallet call returns)
   const [redeemCosts, setRedeemCosts] = useState<Record<string, number>>({});
@@ -155,9 +158,13 @@ export default function App() {
         getDemoSettings(),
       ]);
 
-      let mergedHousehold = hh;
-      let mergedHandovers = hnds;
-      let mergedTickets = tkts;
+      // Demo builds start from the local seed; signed-in builds start empty and only ever
+      // show what the server returned.
+      const live = authEnabled;
+      let mergedHousehold = live ? { ...hh, balance: 0 } : hh;
+      let mergedHandovers = live ? [] : hnds;
+      let mergedTickets = live ? [] : tkts;
+      let failed = false;
 
       try {
         getMe()
@@ -177,7 +184,7 @@ export default function App() {
           // (the karmachari review queue).
           mergedHandovers = [
             ...serverRecords,
-            ...hnds.filter((h) => h.householdId !== hh.id),
+            ...(live ? [] : hnds.filter((h) => h.householdId !== hh.id)),
           ];
           mergedTickets = wallet.tickets.map(serverTicketToRecord);
           setBins(wallet.bins ?? null);
@@ -188,14 +195,31 @@ export default function App() {
           setNeedsHousehold(true);
         }
       } catch (e) {
-        console.warn('Wallet API unavailable — showing local state only.', e);
+        failed = true;
+        console.warn('Wallet API unavailable.', e);
       }
 
       // Ward stats are backend-driven: the officer screen (schema 0015 + 0016) and the
       // resident Impact-tab leaderboard (schema 0017). The seed remains the fallback for
       // whichever call is unreachable.
-      let mergedWardStats = ward;
-      try {
+      let mergedWardStats = live
+        ? {
+            ...ward,
+            householdsEnrolled: 0,
+            participationRateThisWeek: 0,
+            participationRateLastWeek: 0,
+            creditsIssued: 0,
+            rupeeValue: 0,
+            aiSplit: { approved: 0, inReview: 0, rejected: 0 },
+            subDistricts: [],
+            karmacharis: [],
+            anomalies: [],
+            leaderboard: [],
+          }
+        : ward;
+      // Role-specific endpoints only for the role in use: a resident must not spend its
+      // read budget (and log 403s) on officer / karmachari calls every tab switch.
+      if (!live || selectedRole === 'officer') try {
         const [dash, anom] = await Promise.all([
           getOfficerDashboard(),
           getOfficerAnomalies(),
@@ -214,18 +238,19 @@ export default function App() {
           anomalies: anom.anomalies,
         };
       } catch (e) {
-        console.warn('Officer API unavailable — using seeded ward stats.', e);
+        if (live) failed = true;
+        console.warn('Officer API unavailable.', e);
       }
       try {
         const { leaderboard } = await getWardLeaderboard();
-        if (leaderboard.length) mergedWardStats = { ...mergedWardStats, leaderboard };
+        if (live || leaderboard.length) mergedWardStats = { ...mergedWardStats, leaderboard };
       } catch (e) {
-        console.warn('Ward leaderboard API unavailable — using seeded leaderboard.', e);
+        console.warn('Ward leaderboard API unavailable.', e);
       }
 
       // Karmachari header identity + today's counters (schema: workers / worker_issuances).
       let mergedKarmachari = karm;
-      try {
+      if (!live || selectedRole === 'karmachari') try {
         const wp = await getWorkerProfile();
         mergedKarmachari = {
           ...karm,
@@ -239,8 +264,12 @@ export default function App() {
           overrideRate: wp.overrideRate,
         };
       } catch (e) {
-        console.warn('Worker profile API unavailable — using seeded karmachari.', e);
+        if (live) failed = true;
+        console.warn('Worker profile API unavailable.', e);
       }
+      setLoadError(
+        live && failed ? "Couldn't reach SafaiSeva. Check your connection — figures will appear once it's back." : null
+      );
 
       setHousehold(mergedHousehold);
       setHandovers(mergedHandovers);
@@ -253,7 +282,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [authEnabled, selectedRole]);
 
   useEffect(() => {
     loadData();
@@ -392,6 +421,19 @@ export default function App() {
           ) : (
             /* In the app: role-specific screens */
             <>
+              {loadError && (
+                <div role="alert" className="mb-3 bg-amber/10 border border-amber/30 rounded-md p-3 text-[11px] text-tint flex items-center justify-between gap-2">
+                  <span>{loadError}</span>
+                  <button
+                    type="button"
+                    onClick={() => loadData()}
+                    className="text-[11px] font-semibold text-white bg-ink border border-muted/40 rounded-md px-2.5 min-h-[36px] cursor-pointer shrink-0"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+
               {/* RESIDENT VIEWS */}
               {activeRole === 'resident' && needsHousehold && (
                 <HouseholdSetupView
