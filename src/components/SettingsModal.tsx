@@ -52,6 +52,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   if (!isOpen) return null;
 
+  // Demo-only tools (role codes, simulated offline, local reset) never ship in a signed-in
+  // deployment (audit F14): they describe a demo, not the product.
+  const demoMode = import.meta.env.VITE_AUTH_ENABLED !== 'true';
+
   const fmtHour = (h: number) => {
     const hr12 = h % 12 === 0 ? 12 : h % 12;
     return `${String(hr12).padStart(2, '0')}:00 ${h < 12 || h === 24 ? 'AM' : 'PM'}`;
@@ -111,8 +115,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Header */}
           <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
             <div>
-              <h3 className="text-sm font-semibold text-white">Demo Control Panel</h3>
-              <p className="text-[11px] text-zinc-400 font-mono">Jury presentation & deterministic state toggles</p>
+              <h3 className="text-sm font-semibold text-white">{demoMode ? 'Demo Control Panel' : 'Settings'}</h3>
+              {demoMode && (
+                <p className="text-[11px] text-zinc-400 font-mono">Jury presentation & deterministic state toggles</p>
+              )}
             </div>
             <button
               id="close-settings-modal-btn"
@@ -210,6 +216,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
 
+          {demoMode && (
+          <>
           {/* Demo Role Access Codes Reference */}
           <div className="mt-3.5 bg-zinc-950 p-3 rounded-lg border border-zinc-800 text-xs">
             <div className="text-xs font-semibold text-white mb-1.5 flex items-center justify-between">
@@ -234,6 +242,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
 
+          </>
+          )}
+
           {/* Verification is server-authoritative — no client-side outcome override */}
           <div className="mt-4">
             <label className="block text-xs font-semibold text-white mb-1.5">
@@ -246,6 +257,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
 
+          {demoMode && (
+          <>
           {/* Connectivity — simulate offline for the capture queue (T3.1) */}
           <div className="mt-4">
             <label className="block text-xs font-semibold text-white mb-1.5">Connectivity</label>
@@ -316,6 +329,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               )}
             </button>
           </div>
+
+          </>
+          )}
 
           <DeleteMyDataSection />
         </div>

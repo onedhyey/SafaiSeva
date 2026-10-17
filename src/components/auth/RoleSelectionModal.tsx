@@ -18,6 +18,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { LeafGlyph } from '../LeafGlyph';
+import { getWorkerProfile, getOfficerDashboard } from '../../lib/api';
 
 interface RoleSelectionModalProps {
   isOpen: boolean;
@@ -38,6 +39,7 @@ export const RoleSelectionModal: React.FC<RoleSelectionModalProps> = ({
   const [officerCode, setOfficerCode] = useState('');
   const [codeError, setCodeError] = useState<string | null>(null);
   const [isValidating, setIsValidating] = useState(false);
+  const [serverCheckError, setServerCheckError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -47,8 +49,31 @@ export const RoleSelectionModal: React.FC<RoleSelectionModalProps> = ({
     if (onClose) onClose();
   };
 
+  // Signed-in deployments: the server decides who is a karmachari / officer (a workers or
+  // ward_officers row linked to this account). The client-side code screens below are a
+  // demo convenience only and are skipped (audit F2).
+  const enterServerRole = async (role: 'karmachari' | 'officer') => {
+    setServerCheckError(null);
+    setIsValidating(true);
+    try {
+      if (role === 'karmachari') await getWorkerProfile();
+      else await getOfficerDashboard();
+      setSelectedRole(role);
+      if (onClose) onClose();
+    } catch (e: any) {
+      setServerCheckError(
+        role === 'karmachari'
+          ? 'This account is not registered as a karmachari. Ask your ward officer to link it.'
+          : 'This account is not registered as a ward officer.'
+      );
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
   // Handles choosing Karmachari role: Ask for Ward Officer code
   const handleSelectKarmachari = () => {
+    if (authEnabled) return void enterServerRole('karmachari');
     setStage('karmachari_code');
     setCodeError(null);
     setKarmachariCode('');
@@ -56,6 +81,7 @@ export const RoleSelectionModal: React.FC<RoleSelectionModalProps> = ({
 
   // Handles choosing Ward Officer role: Ask for Demo Code
   const handleSelectOfficer = () => {
+    if (authEnabled) return void enterServerRole('officer');
     setStage('officer_code');
     setCodeError(null);
     setOfficerCode('');
@@ -181,6 +207,13 @@ export const RoleSelectionModal: React.FC<RoleSelectionModalProps> = ({
         {/* Dynamic Stages */}
         <div className="my-4 overflow-y-auto flex-1 pr-0.5 space-y-3">
           {/* STAGE 1: Primary Role Choices */}
+          {stage === 'select' && serverCheckError && (
+            <div role="alert" className="mb-3 bg-red-950/40 border border-red-900/60 rounded-lg p-2.5 text-[11px] text-zinc-200 flex items-start gap-2">
+              <AlertTriangle size={14} className="text-red-400 shrink-0 mt-0.5" aria-hidden="true" />
+              <span>{serverCheckError}</span>
+            </div>
+          )}
+
           {stage === 'select' && (
             <>
               <p className="text-xs text-zinc-300">
