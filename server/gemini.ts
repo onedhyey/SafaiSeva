@@ -93,7 +93,7 @@ const evidenceSchema = {
   ],
 };
 
-const SYSTEM = `You are the vision component of the Ahmedabad Municipal Corporation SafaiSeva waste-segregation programme.
+const SYSTEM = `You are the vision component of SafaiSeva, a household waste-segregation programme in Ahmedabad.
 
 Your ONLY job is to report OBSERVATIONS about the submitted image or video. You do NOT decide whether the submission passes, and you do NOT award any points or credits — a separate rules engine does that from your report.
 
