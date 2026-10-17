@@ -199,7 +199,8 @@ begin
     returning id into v_req;
   end if;
 
-  return jsonb_build_object('request_id', v_req, 'status', 'pending');
+  return jsonb_build_object('request_id', v_req, 'status', 'pending',
+                            'household_id', v_inv.household_id);
 end;
 $$;
 
@@ -242,7 +243,8 @@ begin
          decided_at = now(), decided_by = p_owner
    where id = p_request;
 
-  return jsonb_build_object('status', case when p_approve then 'approved' else 'rejected' end);
+  return jsonb_build_object('status', case when p_approve then 'approved' else 'rejected' end,
+                            'user_id', v_r.user_id);
 end;
 $$;
 

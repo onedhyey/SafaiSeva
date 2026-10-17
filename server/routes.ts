@@ -18,6 +18,7 @@ import { signTicket, assertTicketSigningReady } from './qrToken.ts';
 import { resolveCaptureTime } from './captureTime.ts';
 import { rpcError } from './rpcErrors.ts';
 import { currentIdentityMode } from './principal.ts';
+import { pushPublicKey, saveSubscription, removeSubscription, notifyHousehold, notifyUsers } from './push.ts';
 import {
   CONSENT_VERSION,
   consentFor,
@@ -795,6 +796,17 @@ export function mountApiRoutes(app: Express) {
       if (out.status === 'verified' && out.household_id) {
         await awardMilestones(out.household_id, worker.userId, rules.settlement_hold_hours);
       }
+      if (out.household_id) {
+        void notifyHousehold(out.household_id, {
+          title: out.status === 'verified' ? 'Handover approved' : 'Handover reviewed',
+          body:
+            out.status === 'verified'
+              ? `A karmachari approved your handover: +${out.credits_awarded} leaves, spendable in ${rules.settlement_hold_hours} h.`
+              : 'A karmachari reviewed your handover and could not approve it. Open the app for the reason.',
+          url: '/?tab=wallet',
+          tag: `handover-${req.params.id}`,
+        });
+      }
       return res.json({
         status: out.status,
         creditsAwarded: out.credits_awarded ?? 0,
@@ -840,6 +852,14 @@ export function mountApiRoutes(app: Express) {
       }
 
       const out: any = data;
+      if (out.household_id) {
+        void notifyHousehold(out.household_id, {
+          title: 'Doorstep credit',
+          body: `Your karmachari confirmed separated waste: +${out.credits_awarded} leaves.`,
+          url: '/?tab=wallet',
+          tag: `doorstep-${out.handover_id}`,
+        });
+      }
       return res.json({ householdCode: out.household_code ?? code, creditsAwarded: out.credits_awarded });
     } catch (e: any) {
       return failFrom(res, e, 'issue');
@@ -1054,7 +1074,21 @@ export function mountApiRoutes(app: Express) {
         p_user: principal.userId,
       });
       if (error) return failDb(res, error);
-      return res.json({ status: (data as any).status, requestId: (data as any).request_id });
+      const out: any = data;
+      if (out.household_id) {
+        const { data: owners } = await admin()
+          .from('household_members')
+          .select('user_id')
+          .eq('household_id', out.household_id)
+          .eq('member_role', 'owner');
+        void notifyUsers((owners ?? []).map((o: any) => o.user_id), {
+          title: 'Someone asked to join your household',
+          body: 'Open Settings → Household members to approve or decline.',
+          url: '/?settings=household',
+          tag: `join-${out.request_id}`,
+        });
+      }
+      return res.json({ status: out.status, requestId: out.request_id });
     } catch (e: any) {
       return failFrom(res, e, 'join');
     }
@@ -1101,7 +1135,19 @@ export function mountApiRoutes(app: Express) {
         p_approve: req.body?.approve === true,
       });
       if (error) return failDb(res, error);
-      return res.json({ status: (data as any).status });
+      const out: any = data;
+      if (out.user_id) {
+        void notifyUsers([out.user_id], {
+          title: out.status === 'approved' ? 'You joined the household' : 'Join request declined',
+          body:
+            out.status === 'approved'
+              ? 'Open SafaiSeva to start documenting your handovers.'
+              : 'The household owner declined your request.',
+          url: '/',
+          tag: `join-decision-${req.params.id}`,
+        });
+      }
+      return res.json({ status: out.status });
     } catch (e: any) {
       return failFrom(res, e, 'decide join');
     }
@@ -1155,6 +1201,53 @@ export function mountApiRoutes(app: Express) {
       return res.json({ deleted: true, removedObjects });
     } catch (e: any) {
       return failFrom(res, e, 'delete me');
+    }
+  });
+
+  // ---------------------------------------------------------------------------------
+  // Web Push subscriptions (server/push.ts).
+  //   GET  /api/push/config                      -> { publicKey | null }
+  //   POST /api/push/subscribe   PushSubscription JSON
+  //   POST /api/push/unsubscribe { endpoint }
+  //   POST /api/push/test        -> sends "notifications are on" to the caller's devices
+  // ---------------------------------------------------------------------------------
+  app.get('/api/push/config', readLimiter, (_req: Request, res: Response) => {
+    res.json({ publicKey: pushPublicKey() });
+  });
+
+  app.post('/api/push/subscribe', mutationLimiter, async (req: Request, res: Response) => {
+    try {
+      const principal = await resolvePrincipal(req);
+      if (!pushPublicKey()) return fail(res, 503, 'Notifications are not configured on this server.');
+      await saveSubscription(principal.userId, req.body ?? {});
+      return res.json({ subscribed: true });
+    } catch (e: any) {
+      if (e?.status) return failFrom(res, e, 'push subscribe');
+      return failDb(res, e);
+    }
+  });
+
+  app.post('/api/push/unsubscribe', mutationLimiter, async (req: Request, res: Response) => {
+    try {
+      const principal = await resolvePrincipal(req);
+      await removeSubscription(principal.userId, String(req.body?.endpoint || ''));
+      return res.json({ subscribed: false });
+    } catch (e: any) {
+      return failFrom(res, e, 'push unsubscribe');
+    }
+  });
+
+  app.post('/api/push/test', mutationLimiter, async (req: Request, res: Response) => {
+    try {
+      const principal = await resolvePrincipal(req);
+      await notifyUsers([principal.userId], {
+        title: 'Notifications are on',
+        body: 'SafaiSeva will tell you when your handovers are reviewed and your leaves are ready.',
+        tag: 'push-test',
+      });
+      return res.json({ sent: true });
+    } catch (e: any) {
+      return failFrom(res, e, 'push test');
     }
   });
 

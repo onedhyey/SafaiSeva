@@ -33,6 +33,8 @@ export function consentRequiredError(): Error {
 
 /** Anonymise a user and delete the evidence objects they submitted. */
 export async function forgetUser(userId: string): Promise<{ removedObjects: number }> {
+  // Push endpoints identify a device; drop them first.
+  await admin().from('push_subscriptions').delete().eq('user_id', userId);
   const { data, error } = await admin().rpc('forget_user', { p_user: userId });
   if (error) throw error;
   const keys: string[] = ((data as any)?.storage_paths ?? []).filter(Boolean);

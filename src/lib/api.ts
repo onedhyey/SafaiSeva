@@ -413,3 +413,26 @@ export function acceptConsent(version: string): Promise<{ consentVersion: string
 export function deleteMyData(): Promise<{ deleted: true; removedObjects: number }> {
   return apiFetch<{ deleted: true; removedObjects: number }>('/api/me', { method: 'DELETE' });
 }
+
+// ---- Web Push ----
+export function getPushConfig(): Promise<{ publicKey: string | null }> {
+  return apiFetch<{ publicKey: string | null }>('/api/push/config');
+}
+
+export function savePushSubscription(sub: PushSubscriptionJSON): Promise<{ subscribed: boolean }> {
+  return apiFetch<{ subscribed: boolean }>('/api/push/subscribe', {
+    method: 'POST',
+    body: JSON.stringify(sub),
+  });
+}
+
+export function removePushSubscription(endpoint: string): Promise<{ subscribed: boolean }> {
+  return apiFetch<{ subscribed: boolean }>('/api/push/unsubscribe', {
+    method: 'POST',
+    body: JSON.stringify({ endpoint }),
+  });
+}
+
+export function sendTestPush(): Promise<{ sent: boolean }> {
+  return apiFetch<{ sent: boolean }>('/api/push/test', { method: 'POST' });
+}

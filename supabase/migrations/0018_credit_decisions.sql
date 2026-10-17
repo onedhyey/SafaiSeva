@@ -200,7 +200,8 @@ begin
            decision_reason_code = 'IN_REVIEW_CONFLICT', decision_reason_text = p_reason_text,
            reviewed_by = v_w.user_id, reviewed_at = now(), review_note = p_note
      where id = p_handover;
-    return jsonb_build_object('status', 'rejected', 'credits_awarded', 0);
+    return jsonb_build_object('status', 'rejected', 'credits_awarded', 0,
+                              'household_id', v_h.household_id);
   elsif p_decision <> 'approve' then
     raise exception 'invalid_status' using errcode = 'check_violation';
   end if;
@@ -339,7 +340,8 @@ begin
   end if;
 
   return jsonb_build_object(
-    'handover_id', v_h, 'household_code', v_hh.code, 'credits_awarded', p_credits);
+    'handover_id', v_h, 'household_id', v_hh.id, 'household_code', v_hh.code,
+    'credits_awarded', p_credits);
 end;
 $$;
 

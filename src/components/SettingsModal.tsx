@@ -19,6 +19,7 @@ import { usePwaInstall } from '../lib/usePwaInstall';
 import { InstallModal } from './InstallModal';
 import { HouseholdMembersPanel } from './resident/HouseholdMembersPanel';
 import { DeleteMyDataSection } from './DeleteMyDataSection';
+import { NotificationsSection } from './NotificationsSection';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -129,6 +130,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <HouseholdMembersPanel />
             </div>
           )}
+
+          <NotificationsSection isInstalled={isInstalled} isIos={isIos} />
 
           {/* Standalone PWA Download Section (website only, hidden once installed) */}
           {!isInstalled && (

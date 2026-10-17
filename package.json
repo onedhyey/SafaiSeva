@@ -19,7 +19,8 @@
     "test:auth": "npm run build && node scripts/auth-smoke.mjs",
     "link-worker": "node scripts/link-worker.mjs",
     "ops:purge-evidence": "tsx scripts/purge-evidence.ts",
-    "ops:check-ledger": "tsx scripts/check-ledger.ts"
+    "ops:check-ledger": "tsx scripts/check-ledger.ts",
+    "ops:notify-settled": "tsx scripts/notify-settled.ts"
   },
   "dependencies": {
     "@clerk/backend": "^3.16.13",
