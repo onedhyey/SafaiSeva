@@ -87,13 +87,14 @@ interface HouseholdCtx {
   binCount: number;
   binTarget: number;
   binsOnboardedAt: string | null;
+  suspended: boolean;
 }
 
 async function householdForUser(userId: string): Promise<HouseholdCtx | null> {
   const { data } = await admin()
     .from('household_members')
     .select(
-      'household:households(id, code, collection_start_hour, collection_end_hour, bin_count, bin_target, bins_onboarded_at)'
+      'household:households(id, code, collection_start_hour, collection_end_hour, bin_count, bin_target, bins_onboarded_at, suspended_at)'
     )
     .eq('user_id', userId)
     .limit(1)
@@ -110,6 +111,7 @@ async function householdForUser(userId: string): Promise<HouseholdCtx | null> {
     binCount: hh.bin_count ?? 1,
     binTarget: hh.bin_target ?? 4,
     binsOnboardedAt: hh.bins_onboarded_at ?? null,
+    suspended: hh.suspended_at != null,
   };
 }
 
@@ -265,6 +267,8 @@ export function mountApiRoutes(app: Express) {
       const db = admin();
       const hh = await householdForUser(principal.userId);
       if (!hh) return fail(res, 409, 'No household is linked to this session.');
+      // Don't spend a model call on a household that cannot be credited.
+      if (hh.suspended) return failDb(res, { message: 'household_suspended' });
 
       const body = req.body ?? {};
       const declaredStreams = cleanStreams(body.declaredStreams);
@@ -1248,6 +1252,100 @@ export function mountApiRoutes(app: Express) {
       return res.json({ sent: true });
     } catch (e: any) {
       return failFrom(res, e, 'push test');
+    }
+  });
+
+  // ---------------------------------------------------------------------------------
+  // Officer moderation (audit Phase 4, schema 0022). Ward-scoped; every action needs a
+  // reason, is written to moderation_actions, and is pushed to the household.
+  //   GET  /api/officer/households/:code                 -> household + last 30 handovers
+  //   POST /api/officer/handovers/:id/reverse  { reason }  -> { reversed }
+  //   POST /api/officer/households/:code/suspension { suspended, reason }
+  // ---------------------------------------------------------------------------------
+  async function officerHousehold(req: Request, code: string) {
+    const officer = await resolveOfficer(req);
+    const { data: hh } = await admin()
+      .from('households')
+      .select('id, code, address, ward_id, suspended_at, suspended_reason')
+      .eq('code', code.trim()) // citext: case-insensitive, no wildcards
+      .maybeSingle();
+    if (!hh) throw Object.assign(new Error('That household is not registered.'), { status: 404 });
+    if (!officer.wardId || hh.ward_id !== officer.wardId) {
+      throw Object.assign(new Error('That household is outside your ward.'), { status: 403 });
+    }
+    return { officer, hh };
+  }
+
+  app.get('/api/officer/households/:code', readLimiter, async (req: Request, res: Response) => {
+    try {
+      const { hh } = await officerHousehold(req, req.params.code);
+      const { data, error } = await admin()
+        .from('handovers')
+        .select('id, collection_date, status, credits_awarded, confirmed_streams, decision_reason_code, decision_reason_text, media_kind, created_at, reviewed_by')
+        .eq('household_id', hh.id)
+        .order('created_at', { ascending: false })
+        .limit(30);
+      if (error) return failDb(res, error);
+      return res.json({
+        household: {
+          code: hh.code,
+          address: hh.address,
+          suspended: hh.suspended_at != null,
+          suspendedReason: hh.suspended_reason ?? null,
+        },
+        handovers: data ?? [],
+      });
+    } catch (e: any) {
+      return failFrom(res, e, 'officer household');
+    }
+  });
+
+  app.post('/api/officer/handovers/:id/reverse', mutationLimiter, async (req: Request, res: Response) => {
+    try {
+      const officer = await resolveOfficer(req);
+      const reason = String(req.body?.reason ?? '').slice(0, 300);
+      const { data, error } = await admin().rpc('reverse_handover_credit', {
+        p_handover: req.params.id,
+        p_officer: officer.officerId,
+        p_reason: reason,
+      });
+      if (error) return failDb(res, error);
+      const out: any = data;
+      void notifyHousehold(out.household_id, {
+        title: 'An award was reversed',
+        body: `The ward office reversed ${out.reversed} leaves: ${reason.trim()}`,
+        url: '/?tab=wallet',
+        tag: `reversal-${req.params.id}`,
+      });
+      return res.json({ reversed: out.reversed });
+    } catch (e: any) {
+      return failFrom(res, e, 'reverse');
+    }
+  });
+
+  app.post('/api/officer/households/:code/suspension', mutationLimiter, async (req: Request, res: Response) => {
+    try {
+      const { officer, hh } = await officerHousehold(req, req.params.code);
+      const suspended = req.body?.suspended === true;
+      const reason = String(req.body?.reason ?? '').slice(0, 300);
+      const { error } = await admin().rpc('set_household_suspension', {
+        p_household: hh.id,
+        p_officer: officer.officerId,
+        p_suspended: suspended,
+        p_reason: reason,
+      });
+      if (error) return failDb(res, error);
+      void notifyHousehold(hh.id, {
+        title: suspended ? 'Your household is under review' : 'Your household review is complete',
+        body: suspended
+          ? `Earning and redeeming are paused while the ward office reviews: ${reason.trim()}`
+          : 'You can earn and redeem leaves again.',
+        url: '/',
+        tag: 'suspension',
+      });
+      return res.json({ suspended });
+    } catch (e: any) {
+      return failFrom(res, e, 'suspension');
     }
   });
 

@@ -26,6 +26,11 @@ const KNOWN: Record<string, HttpError> = {
   worker_too_far: { status: 422, message: 'You need to be at the household to issue doorstep credit.' },
   too_few_streams: { status: 400, message: 'Confirm at least wet and dry.' },
   invalid_status: { status: 400, message: 'Invalid decision.' },
+  household_suspended: { status: 403, message: 'This household is suspended pending a review by the ward office.' },
+  officer_inactive: { status: 403, message: 'No active ward officer record for this session.' },
+  already_reversed: { status: 409, message: 'This award was already reversed.' },
+  not_reversible: { status: 409, message: 'Only an approved handover can be reversed.' },
+  reason_required: { status: 400, message: 'Give a reason — it is shown to the household and kept in the audit log.' },
 };
 
 export function rpcError(err: { message?: string } | null | undefined): HttpError {

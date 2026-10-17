@@ -436,3 +436,43 @@ export function removePushSubscription(endpoint: string): Promise<{ subscribed: 
 export function sendTestPush(): Promise<{ sent: boolean }> {
   return apiFetch<{ sent: boolean }>('/api/push/test', { method: 'POST' });
 }
+
+// ---- Officer moderation (schema 0022) ----
+export interface OfficerHouseholdHandover {
+  id: string;
+  collection_date: string;
+  status: 'pending' | 'verified' | 'needs_video' | 'in_review' | 'rejected';
+  credits_awarded: number;
+  confirmed_streams: string[] | null;
+  decision_reason_code: string | null;
+  decision_reason_text: string | null;
+  media_kind: string | null;
+  created_at: string;
+}
+
+export interface OfficerHouseholdResponse {
+  household: { code: string; address: string; suspended: boolean; suspendedReason: string | null };
+  handovers: OfficerHouseholdHandover[];
+}
+
+export function getOfficerHousehold(code: string): Promise<OfficerHouseholdResponse> {
+  return apiFetch<OfficerHouseholdResponse>(`/api/officer/households/${encodeURIComponent(code)}`, {
+    asOfficer: true,
+  });
+}
+
+export function reverseHandover(id: string, reason: string): Promise<{ reversed: number }> {
+  return apiFetch<{ reversed: number }>(`/api/officer/handovers/${encodeURIComponent(id)}/reverse`, {
+    method: 'POST',
+    asOfficer: true,
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function setHouseholdSuspension(code: string, suspended: boolean, reason: string): Promise<{ suspended: boolean }> {
+  return apiFetch<{ suspended: boolean }>(`/api/officer/households/${encodeURIComponent(code)}/suspension`, {
+    method: 'POST',
+    asOfficer: true,
+    body: JSON.stringify({ suspended, reason }),
+  });
+}
