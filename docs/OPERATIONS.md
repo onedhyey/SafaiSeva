@@ -66,9 +66,10 @@ secrets, Supabase scheduled functions calling an endpoint).
 
 ## Open hardening items
 
-- **Content-Security-Policy** is not set yet. Clerk, OpenStreetMap tiles and the geocoder
-  load from third-party origins; build the allow-list in a browser against the real Clerk
-  instance, ship it as `Content-Security-Policy-Report-Only` first.
+- **Content-Security-Policy** ships as `Content-Security-Policy-Report-Only`
+  (`server/http.ts`); violations are logged as `{"event":"csp_violation",…}` lines. After a
+  week of clean production logs against the real Clerk instance, switch the header name to
+  `Content-Security-Policy` to enforce.
 - **Error tracking:** structured JSON logs exist (`server/http.ts`); a hosted tracker
   (e.g. Sentry) needs an account and DSN.
 - **Rate limits** are in memory, per process — fine for one instance.

@@ -89,3 +89,6 @@ export const mutationLimiter = limiter(15 * MIN, 30);
 
 // GET /api/wallet, GET /api/review-queue — polled by the UI on focus / after actions.
 export const readLimiter = limiter(5 * MIN, 120);
+
+// POST /api/csp-report — unauthenticated browser reports; bounded so it cannot flood logs.
+export const cspReportLimiter = limiter(MIN, 20);

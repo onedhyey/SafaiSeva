@@ -234,6 +234,7 @@ try {
       assert(/strict-origin/.test(h('referrer-policy')), `${p} referrer`);
       assert(/camera=\(self\)/.test(h('permissions-policy')), `${p} permissions`);
       assert(!h('x-powered-by'), `${p} x-powered-by hidden`);
+      assert(/default-src 'self'/.test(h('content-security-policy-report-only')), `${p} CSP report-only`);
     }
   });
 

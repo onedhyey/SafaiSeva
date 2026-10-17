@@ -5,7 +5,8 @@ import { createServer as createViteServer } from "vite";
 import { env, supabaseConfigured, geminiConfigured } from "./server/env.ts";
 import { mountApiRoutes } from "./server/routes.ts";
 import { currentIdentityMode } from "./server/principal.ts";
-import { securityHeaders, requestLog } from "./server/http.ts";
+import { securityHeaders, requestLog, cspReport } from "./server/http.ts";
+import { cspReportLimiter } from "./server/rateLimit.ts";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -22,6 +23,7 @@ app.use("/api", requestLog);
 // the JSON body now only carries object keys + small derived video keyframes, so a tight
 // limit is both safe and a DoS backstop on the unauthenticated surface.
 app.use(express.json({ limit: "2mb" }));
+app.post("/api/csp-report", cspReportLimiter, express.json({ type: ["application/csp-report", "application/reports+json"], limit: "16kb" }), cspReport);
 app.use(express.urlencoded({ extended: true, limit: "2mb" }));
 
 // ---------------------------------------------------------------------------------------
