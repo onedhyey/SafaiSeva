@@ -193,6 +193,38 @@ try {
     assert(!/invalid input syntax|uuid|violates|relation|column/i.test(r.text), `leak: ${r.text}`);
   });
 
+  await test('F8: no evidence is accepted before the resident has consented', async () => {
+    const d = 'consent-dev-' + Math.random().toString(36).slice(2, 8);
+    const me = await s.call('GET', '/api/me', { device: d });
+    eq([me.status, me.body?.consentRequired], [200, true], `me (${me.text})`);
+    const r = await s.submitPhoto(d, await noiseJpeg(), {}, { consent: false });
+    eq(r.status, 428, `verify before consent (${r.text})`);
+    const c = await s.call('POST', '/api/me/consent', { device: d, body: { version: me.body.consentVersion } });
+    eq(c.status, 200, 'consent recorded');
+    const me2 = await s.call('GET', '/api/me', { device: d });
+    eq(me2.body?.consentRequired, false, 'consent no longer required');
+  });
+
+  await test('F8: DELETE /api/me anonymises the user and deletes their evidence objects', async () => {
+    const w = (await one(`select id from public.wards where code = 'W12-NAVRANGPURA'`)).id;
+    const d = 'forget-dev-' + Math.random().toString(36).slice(2, 8);
+    const u = (await one(`insert into public.users (device_id) values ($1) returning id`, [d])).id;
+    const hh = (await one(
+      `insert into public.households (code, address, ward_id, collection_start_hour, collection_end_hour)
+       values ('HH-FORGET-1', 'f', $1, 0, 24) returning id`, [w]
+    )).id;
+    await s.db.query(`insert into public.household_members (household_id, user_id, member_role) values ($1, $2, 'owner')`, [hh, u]);
+    const r = await s.submitPhoto(d, await noiseJpeg());
+    eq(r.status, 200, `verify (${r.text})`);
+    const key = (await one(`select storage_path from public.handover_media m join public.handovers h on h.id = m.handover_id where h.household_id = $1`, [hh])).storage_path;
+    assert(s.objects.has(key), 'object stored');
+    const del = await s.call('DELETE', '/api/me', { device: d });
+    eq(del.status, 200, `delete (${del.text})`);
+    assert(!s.objects.has(key), 'object removed from storage');
+    const row = await one(`select display_name, deleted_at is not null as deleted from public.users where id = $1`, [u]);
+    eq([row.display_name, row.deleted], ['Deleted user', true], 'anonymised');
+  });
+
   await test('ledger reconciliation is empty after the whole run', async () => {
     const rows = (await s.db.query(`select * from public.v_ledger_reconciliation`)).rows;
     eq(rows, [], 'reconciliation');

@@ -267,7 +267,13 @@ export async function startStack({ env = {} } = {}) {
     }
 
     // Capture + upload + verify, as the client does it.
-    async function submitPhoto(device, jpeg, extra = {}) {
+    async function submitPhoto(device, jpeg, extra = {}, { consent = true } = {}) {
+      if (consent) {
+        const me = await call('GET', '/api/me', { device });
+        if (me.body?.consentRequired) {
+          await call('POST', '/api/me/consent', { device, body: { version: me.body.consentVersion } });
+        }
+      }
       const signed = await call('POST', '/api/uploads/sign', {
         device,
         body: { kind: 'photo', contentType: 'image/jpeg' },
@@ -295,6 +301,7 @@ export async function startStack({ env = {} } = {}) {
     return {
       db,
       base,
+      objects,
       call,
       submitPhoto,
       setVision: (v) => (vision = v),
