@@ -289,8 +289,9 @@ export async function startStack({ env = {} } = {}) {
       throw new Error(`${e.message}\n${apiLog}`);
     });
 
-    async function call(method, p, { device, worker, officer, body } = {}) {
+    async function call(method, p, { device, worker, officer, body, lang } = {}) {
       const headers = { 'content-type': 'application/json' };
+      if (lang) headers['x-lang'] = lang;
       if (device) headers['x-device-id'] = device;
       if (worker) headers['x-demo-worker'] = worker;
       if (officer) headers['x-demo-officer'] = officer;

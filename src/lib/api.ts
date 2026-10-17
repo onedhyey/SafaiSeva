@@ -3,6 +3,7 @@
 // server prefers that (see server/principal.ts).
 
 import { getDeviceId, getAuthToken } from './authContext';
+import { getLang } from './i18n';
 
 export interface BinsInfo {
   count: number;
@@ -122,6 +123,8 @@ async function apiFetch<T>(
     headers: {
       'Content-Type': 'application/json',
       'x-device-id': getDeviceId(),
+      // Verdict reasons come back in the resident's language (reason codes have en + gu).
+      'x-lang': getLang(),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(asWorker ? { 'x-demo-worker': DEMO_WORKER_CODE } : {}),
       ...(asOfficer ? { 'x-demo-officer': DEMO_OFFICER_CODE } : {}),

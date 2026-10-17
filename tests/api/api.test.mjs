@@ -321,6 +321,17 @@ try {
     assert(n >= 3, `audit rows: ${n}`);
   });
 
+  await test('verdict reasons come back in Gujarati when the app asks for it', async () => {
+    const signed = await s.call('POST', '/api/uploads/sign', { device: dev, body: { kind: 'photo', contentType: 'image/jpeg' } });
+    const r = await s.call('POST', '/api/handovers/verify', {
+      device: dev,
+      lang: 'gu',
+      body: { declaredStreams: ['wet'], attempt: 1, photoKey: signed.body.key },
+    });
+    eq(r.status, 200, `verify (${r.text})`);
+    assert(/[\u0A80-\u0AFF]/.test(r.body.reasonText), `Gujarati text: ${r.body.reasonText}`);
+  });
+
   await test('ledger reconciliation is empty after the whole run', async () => {
     const rows = (await s.db.query(`select * from public.v_ledger_reconciliation`)).rows;
     eq(rows, [], 'reconciliation');

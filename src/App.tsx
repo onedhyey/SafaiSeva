@@ -31,6 +31,7 @@ import {
   BinsInfo,
 } from './lib/api';
 import { ConsentModal } from './components/ConsentModal';
+import { useI18n } from './lib/i18n';
 import { UpdatePrompt } from './components/UpdatePrompt';
 import { serverHandoverToRecord, serverTicketToRecord } from './lib/serverMap';
 import { useOnline } from './lib/useOnline';
@@ -65,6 +66,7 @@ import { OutboxView } from './components/resident/OutboxView';
 
 export default function App() {
   const { isSignedIn, selectedRole, setSelectedRole, user, authEnabled, authGate } = useAuth();
+  const { t } = useI18n();
   const [residentTab, setResidentTab] = useState<ResidentTab>('wallet');
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -273,7 +275,7 @@ export default function App() {
         console.warn('Worker profile API unavailable.', e);
       }
       setLoadError(
-        live && failed ? "Couldn't reach SafaiSeva. Check your connection — figures will appear once it's back." : null
+        live && failed ? 'load.error' : null
       );
 
       setHousehold(mergedHousehold);
@@ -428,13 +430,13 @@ export default function App() {
             <>
               {loadError && (
                 <div role="alert" className="mb-3 bg-amber/10 border border-amber/30 rounded-md p-3 text-[11px] text-tint flex items-center justify-between gap-2">
-                  <span>{loadError}</span>
+                  <span>{t(loadError)}</span>
                   <button
                     type="button"
                     onClick={() => loadData()}
                     className="text-[11px] font-semibold text-white bg-ink border border-muted/40 rounded-md px-2.5 min-h-[36px] cursor-pointer shrink-0"
                   >
-                    Retry
+                    {t('load.retry')}
                   </button>
                 </div>
               )}

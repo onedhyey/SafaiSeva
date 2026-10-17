@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Bell, BellOff } from 'lucide-react';
 import { getPushConfig, savePushSubscription, removePushSubscription, sendTestPush } from '../lib/api';
+import { useI18n } from '../lib/i18n';
 
 function urlBase64ToUint8Array(base64: string): Uint8Array {
   const padding = '='.repeat((4 - (base64.length % 4)) % 4);
@@ -13,6 +14,7 @@ type State = 'loading' | 'unsupported' | 'ios-install' | 'unconfigured' | 'denie
 // Opt-in for Web Push. iPhones only allow push for apps installed to the home screen
 // (iOS 16.4+), so there the section explains how to install instead.
 export const NotificationsSection: React.FC<{ isInstalled: boolean; isIos: boolean }> = ({ isInstalled, isIos }) => {
+  const { t } = useI18n();
   const [state, setState] = useState<State>('loading');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,12 +78,12 @@ export const NotificationsSection: React.FC<{ isInstalled: boolean; isIos: boole
 
   const note: Record<State, string> = {
     loading: '',
-    unsupported: 'This browser does not support notifications.',
-    'ios-install': 'On iPhone, add SafaiSeva to your Home Screen first (Share → Add to Home Screen), then turn notifications on from the installed app.',
-    unconfigured: 'Notifications are not available right now.',
-    denied: 'Notifications are blocked for this site. Allow them in your browser settings to turn them on.',
-    off: 'Get told when your handover is reviewed and when your leaves are ready to spend.',
-    on: 'You will be notified about reviews and when your leaves are ready.',
+    unsupported: t('notify.unsupported'),
+    'ios-install': t('notify.ios'),
+    unconfigured: t('notify.unconfigured'),
+    denied: t('notify.denied'),
+    off: t('notify.offText'),
+    on: t('notify.onText'),
   };
 
   return (
@@ -89,7 +91,7 @@ export const NotificationsSection: React.FC<{ isInstalled: boolean; isIos: boole
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           {state === 'on' ? <Bell size={15} className="text-emerald-400" aria-hidden="true" /> : <BellOff size={15} className="text-zinc-400" aria-hidden="true" />}
-          <span className="text-xs font-medium text-white">Notifications</span>
+          <span className="text-xs font-medium text-white">{t('notify.title')}</span>
         </div>
         {(state === 'off' || state === 'on') && (
           <button
@@ -98,7 +100,7 @@ export const NotificationsSection: React.FC<{ isInstalled: boolean; isIos: boole
             disabled={busy}
             className="text-xs font-semibold px-3 min-h-[40px] rounded-md border border-zinc-700 text-zinc-200 hover:bg-zinc-800 cursor-pointer disabled:opacity-50"
           >
-            {busy ? '…' : state === 'on' ? 'Turn off' : 'Turn on'}
+            {busy ? '…' : state === 'on' ? t('notify.off') : t('notify.on')}
           </button>
         )}
       </div>

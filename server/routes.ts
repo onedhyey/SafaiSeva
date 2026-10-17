@@ -122,6 +122,11 @@ const DOORSTEP_MAX_DISTANCE_M = 150;
 // The pilot onboards a single ward; new households are placed in it.
 const PILOT_WARD_CODE = process.env.PILOT_WARD_CODE?.trim() || 'W12-NAVRANGPURA';
 
+// Reason texts are rendered in the resident's language when we have it (en / gu today).
+function reqLang(req: Request): 'en' | 'gu' {
+  return req.header('x-lang') === 'gu' ? 'gu' : 'en';
+}
+
 function cleanStreams(input: any): WasteStream[] {
   if (!Array.isArray(input)) return [];
   return ALL_STREAMS.filter((s) => input.includes(s));
@@ -302,7 +307,7 @@ export function mountApiRoutes(app: Express) {
 
       // Reject too-few-streams before touching Storage / the model.
       if (declaredStreams.length < (rules.min_declared_streams ?? 2)) {
-        const r = renderReason('TOO_FEW_STREAMS');
+        const r = renderReason('TOO_FEW_STREAMS', { lang: reqLang(req) });
         return res.json({
           status: 'rejected',
           reasonCode: r.code,
@@ -433,7 +438,7 @@ export function mountApiRoutes(app: Express) {
             : await extractFromPhoto(photoData!.dataUrl, declaredStreams);
       } catch (e: any) {
         await db.from('handovers').update({ status: 'in_review', decision_reason_code: 'SERVICE_ERROR' }).eq('id', handoverId);
-        const r = renderReason('SERVICE_ERROR');
+        const r = renderReason('SERVICE_ERROR', { lang: reqLang(req) });
         return res.status(e.status ?? 502).json({
           handoverId,
           status: 'in_review',
@@ -506,6 +511,7 @@ export function mountApiRoutes(app: Express) {
         mediaKind,
         fraudSignals,
         collectionWindow: hh.collectionWindow,
+        lang: reqLang(req),
       });
 
       // --- record fraud flags ---
@@ -528,7 +534,7 @@ export function mountApiRoutes(app: Express) {
       // --- finalize: decision + ledger in one transaction under the household lock ---
       // (audit F5 — the earn row used to be written before the handover update, so a
       // same-day race could pay a submission that was then rejected.)
-      const dailyLimit = renderReason('DAILY_LIMIT_REACHED');
+      const dailyLimit = renderReason('DAILY_LIMIT_REACHED', { lang: reqLang(req) });
       const { data: outcome, error: decErr } = await db.rpc('record_handover_decision', {
         p_handover: handoverId,
         p_household: hh.id,
@@ -698,7 +704,7 @@ export function mountApiRoutes(app: Express) {
         severity: 'info',
         detail: { note: String(req.body?.note ?? '').slice(0, 500) },
       });
-      const r = renderReason('IN_REVIEW_CONFLICT');
+      const r = renderReason('IN_REVIEW_CONFLICT', { lang: reqLang(req) });
       return res.json({ status: 'in_review', reasonText: r.text });
     } catch (e: any) {
       return failFrom(res, e, 'dispute');

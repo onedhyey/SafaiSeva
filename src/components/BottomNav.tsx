@@ -1,5 +1,6 @@
 import React from 'react';
 import { Wallet, Camera, Ticket, BarChart3 } from 'lucide-react';
+import { useI18n } from '../lib/i18n';
 
 // 'outbox' is a routable resident screen (reached from the wallet) but not a bottom-nav
 // tab, so it is absent from the `tabs` array below.
@@ -11,11 +12,12 @@ interface BottomNavProps {
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, onTabChange }) => {
+  const { t } = useI18n();
   const tabs: { id: ResidentTab; label: string; icon: React.ElementType }[] = [
-    { id: 'wallet', label: 'Wallet', icon: Wallet },
-    { id: 'document', label: 'Document', icon: Camera },
-    { id: 'rewards', label: 'Rewards', icon: Ticket },
-    { id: 'impact', label: 'Impact', icon: BarChart3 },
+    { id: 'wallet', label: t('nav.wallet'), icon: Wallet },
+    { id: 'document', label: t('nav.document'), icon: Camera },
+    { id: 'rewards', label: t('nav.rewards'), icon: Ticket },
+    { id: 'impact', label: t('nav.impact'), icon: BarChart3 },
   ];
 
   return (

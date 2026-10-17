@@ -20,6 +20,7 @@ import { InstallModal } from './InstallModal';
 import { HouseholdMembersPanel } from './resident/HouseholdMembersPanel';
 import { DeleteMyDataSection } from './DeleteMyDataSection';
 import { NotificationsSection } from './NotificationsSection';
+import { useI18n, LANGS } from '../lib/i18n';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -46,6 +47,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   simulateOffline,
   onToggleOffline,
 }) => {
+  const { lang, setLang, t } = useI18n();
   const [resetting, setResetting] = useState(false);
   const [resetDone, setResetDone] = useState(false);
   const { isInstalled, isIos, hasNativePrompt, showInstallModal, setShowInstallModal, triggerInstall } = usePwaInstall();
@@ -128,6 +130,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             >
               <X size={16} />
             </button>
+          </div>
+
+          {/* Language */}
+          <div className="mt-3.5">
+            <div className="text-xs font-semibold text-white mb-1.5" id="lang-label">{t('lang.label')}</div>
+            <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-labelledby="lang-label">
+              {LANGS.map((l) => (
+                <button
+                  key={l.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={lang === l.id}
+                  onClick={() => setLang(l.id)}
+                  className={`text-xs rounded-lg border min-h-[40px] cursor-pointer ${
+                    lang === l.id ? 'border-emerald-500 text-white bg-emerald-950/50' : 'border-zinc-700 text-zinc-300'
+                  }`}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Household invites + join approvals (owner only; audit F3) */}

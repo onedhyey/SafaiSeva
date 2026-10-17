@@ -6,10 +6,12 @@ import {
   decideJoinRequest,
   JoinRequest,
 } from '../../lib/api';
+import { useI18n } from '../../lib/i18n';
 
 // Owner tools for the household: mint a short-lived invite code for family members, and
 // approve or decline who asked to join (audit F3). Non-owners simply see no requests.
 export const HouseholdMembersPanel: React.FC = () => {
+  const { t } = useI18n();
   const [invite, setInvite] = useState<{ token: string; expiresAt: string } | null>(null);
   const [requests, setRequests] = useState<JoinRequest[]>([]);
   const [busy, setBusy] = useState(false);
@@ -69,7 +71,7 @@ export const HouseholdMembersPanel: React.FC = () => {
     <div className="bg-ink-soft border border-muted/30 rounded-lg p-4 space-y-3 text-left">
       <div className="flex items-center gap-2">
         <Users size={14} className="text-green" />
-        <h3 className="text-xs font-semibold text-white">Household members</h3>
+        <h3 className="text-xs font-semibold text-white">{t('members.title')}</h3>
       </div>
 
       {error && <p className="text-[11px] text-red" role="alert">{error}</p>}
@@ -77,9 +79,8 @@ export const HouseholdMembersPanel: React.FC = () => {
       {invite ? (
         <div className="space-y-1.5">
           <p className="text-[11px] text-muted-l">
-            Share this invite code with family. It expires{' '}
-            {new Date(invite.expiresAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}.
-            You'll approve each person before they join.
+            {t('members.share')}{' '}
+            ({new Date(invite.expiresAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })})
           </p>
           <div className="flex items-center gap-2">
             <span className="font-mono text-base font-bold tracking-widest text-white">{invite.token}</span>
@@ -90,7 +91,7 @@ export const HouseholdMembersPanel: React.FC = () => {
               className="inline-flex items-center gap-1 text-[11px] font-semibold text-green bg-green/10 border border-green/30 px-2 py-1 rounded-md cursor-pointer min-h-[32px]"
             >
               {copied ? <Check size={12} /> : <Copy size={12} />}
-              <span>{copied ? 'Copied' : 'Copy'}</span>
+              <span>{copied ? t('members.copied') : t('members.copy')}</span>
             </button>
           </div>
         </div>
@@ -102,7 +103,7 @@ export const HouseholdMembersPanel: React.FC = () => {
           className="w-full inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-white bg-green hover:bg-[#16934f] rounded-md py-2.5 min-h-[44px] cursor-pointer disabled:opacity-50"
         >
           <UserPlus size={14} />
-          <span>Invite a family member</span>
+          <span>{t('members.invite')}</span>
         </button>
       )}
 
@@ -110,7 +111,7 @@ export const HouseholdMembersPanel: React.FC = () => {
         <ul className="divide-y divide-muted/15 border-t border-muted/15">
           {requests.map((r) => (
             <li key={r.id} className="flex items-center justify-between py-2 gap-2">
-              <span className="text-xs text-tint truncate">{r.name} wants to join</span>
+              <span className="text-xs text-tint truncate">{t('members.wants', { name: r.name })}</span>
               <span className="flex gap-1.5 shrink-0">
                 <button
                   type="button"
@@ -118,7 +119,7 @@ export const HouseholdMembersPanel: React.FC = () => {
                   onClick={() => handleDecide(r.id, true)}
                   className="text-[11px] font-semibold text-white bg-green rounded-md px-2.5 min-h-[36px] cursor-pointer disabled:opacity-50"
                 >
-                  Approve
+                  {t('members.approve')}
                 </button>
                 <button
                   type="button"
