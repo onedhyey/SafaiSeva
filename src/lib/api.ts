@@ -389,3 +389,27 @@ export interface LeaderboardEntry {
 export function getWardLeaderboard(): Promise<{ leaderboard: LeaderboardEntry[] }> {
   return apiFetch<{ leaderboard: LeaderboardEntry[] }>('/api/ward/leaderboard');
 }
+
+// ---- The signed-in person: privacy notice consent + erasure (audit F8) ----
+export interface MeResponse {
+  identityMode: 'clerk' | 'demo' | 'disabled';
+  consentVersion: string;
+  consentAcceptedVersion: string | null;
+  consentRequired: boolean;
+  householdCode: string | null;
+}
+
+export function getMe(): Promise<MeResponse> {
+  return apiFetch<MeResponse>('/api/me');
+}
+
+export function acceptConsent(version: string): Promise<{ consentVersion: string }> {
+  return apiFetch<{ consentVersion: string }>('/api/me/consent', {
+    method: 'POST',
+    body: JSON.stringify({ version }),
+  });
+}
+
+export function deleteMyData(): Promise<{ deleted: true; removedObjects: number }> {
+  return apiFetch<{ deleted: true; removedObjects: number }>('/api/me', { method: 'DELETE' });
+}

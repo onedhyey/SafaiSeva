@@ -27,8 +27,10 @@ import {
   getOfficerAnomalies,
   getWardLeaderboard,
   getWorkerProfile,
+  getMe,
   BinsInfo,
 } from './lib/api';
+import { ConsentModal } from './components/ConsentModal';
 import { serverHandoverToRecord, serverTicketToRecord } from './lib/serverMap';
 import { useOnline } from './lib/useOnline';
 import {
@@ -84,6 +86,9 @@ export default function App() {
 
   // Auth-on path: a signed-in resident with no household yet must create or join one.
   const [needsHousehold, setNeedsHousehold] = useState<boolean>(false);
+  // Privacy notice (audit F8): the server refuses evidence until the current version is accepted.
+  const [consent, setConsent] = useState<{ required: boolean; version: string } | null>(null);
+  const [consentDismissed, setConsentDismissed] = useState<boolean>(false);
 
   // Server-backed reward costs (fallback to nothing until the wallet call returns)
   const [redeemCosts, setRedeemCosts] = useState<Record<string, number>>({});
@@ -154,6 +159,9 @@ export default function App() {
       let mergedTickets = tkts;
 
       try {
+        getMe()
+          .then((me) => setConsent({ required: me.consentRequired, version: me.consentVersion }))
+          .catch(() => setConsent(null));
         const wallet = await getWallet();
         if (wallet.householdCode) {
           setNeedsHousehold(false);
@@ -527,6 +535,20 @@ export default function App() {
         onClose={() => setSelectedHandover(null)}
         onDisputed={loadData}
       />
+
+      {/* Privacy notice — before the first submission (audit F8) */}
+      {inApp && activeRole === 'resident' && consent && (
+        <ConsentModal
+          // Dismissable, but it comes back whenever the resident opens the capture screen.
+          isOpen={consent.required && (!consentDismissed || residentTab === 'document')}
+          version={consent.version}
+          onAccepted={() => setConsent({ ...consent, required: false })}
+          onDismiss={() => {
+            setConsentDismissed(true);
+            if (residentTab === 'document') setResidentTab('wallet');
+          }}
+        />
+      )}
 
       {/* Bin setup / onboarding (audit P1) */}
       {inApp && activeRole === 'resident' && bins && (

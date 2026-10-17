@@ -18,6 +18,7 @@ import { DemoOutcomeOverride, HouseholdProfile, AppTheme } from '../types';
 import { usePwaInstall } from '../lib/usePwaInstall';
 import { InstallModal } from './InstallModal';
 import { HouseholdMembersPanel } from './resident/HouseholdMembersPanel';
+import { DeleteMyDataSection } from './DeleteMyDataSection';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -312,6 +313,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               )}
             </button>
           </div>
+
+          <DeleteMyDataSection />
         </div>
       </div>
 
