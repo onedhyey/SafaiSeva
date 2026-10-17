@@ -25,14 +25,9 @@ export const ImpactView: React.FC<ImpactViewProps> = ({
     wardStats.participationRateThisWeek - wardStats.participationRateLastWeek
   ).toFixed(1);
 
-  // Drop the live wallet balance into this household's leaderboard row, then re-sort so
-  // the ranking stays honest as credits are earned or spent during the demo.
-  const leaderboard = wardStats.leaderboard
-    .map((row) =>
-      row.householdCode === household.id ? { ...row, credits: household.balance } : row
-    )
-    .sort((a, b) => b.credits - a.credits)
-    .map((row, i) => ({ ...row, rank: i + 1 }));
+  // Ranked server-side by credits earned in the last 30 days (spending never lowers a
+  // rank), so the client renders it as given.
+  const leaderboard = wardStats.leaderboard;
 
   return (
     <div className="space-y-5 pb-20 pt-1 text-left select-none">
@@ -144,16 +139,16 @@ export const ImpactView: React.FC<ImpactViewProps> = ({
               Ward Segregation Leaderboard
             </h2>
           </div>
-          <span className="text-[11px] text-muted-l font-mono">Top 8 Active</span>
+          <span className="text-[11px] text-muted-l font-mono">Last 30 days</span>
         </div>
 
         <div className="bg-ink-soft border border-muted/20 rounded-lg divide-y divide-muted/15 overflow-hidden">
           {leaderboard.map((item) => {
-            const isUser = item.householdCode === household.id;
+            const isUser = item.isYou === true;
 
             return (
               <div
-                key={item.rank}
+                key={`${item.rank}-${item.label}`}
                 className={`p-3 flex items-center justify-between text-xs transition-colors ${
                   isUser ? 'bg-green/10 text-white font-medium' : 'text-tint hover:bg-ink/40'
                 }`}
@@ -174,11 +169,8 @@ export const ImpactView: React.FC<ImpactViewProps> = ({
                   </div>
                   <div>
                     <div className="text-xs text-white">
-                      {item.society}
+                      {item.label}
                       {isUser && <span className="text-green ml-1 font-bold">(You)</span>}
-                    </div>
-                    <div className="text-[10px] text-muted-l font-mono">
-                      {item.householdCode} · {item.streak}-day streak
                     </div>
                   </div>
                 </div>

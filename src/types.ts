@@ -135,12 +135,12 @@ export interface KarmachariProfile {
   overrideRate: number; // e.g. 64%
 }
 
+// Public leaderboard row: no household code or address ever reaches the client (audit F3).
 export interface WardLeaderboardEntry {
   rank: number;
-  householdCode: string;
-  society: string;
-  streak: number;
-  credits: number;
+  label: string; // "Your household" | "Household #n"
+  credits: number; // earned in the last 30 days
+  isYou?: boolean;
 }
 
 export interface SubDistrictStat {

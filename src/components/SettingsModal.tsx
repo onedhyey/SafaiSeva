@@ -17,6 +17,7 @@ import {
 import { DemoOutcomeOverride, HouseholdProfile, AppTheme } from '../types';
 import { usePwaInstall } from '../lib/usePwaInstall';
 import { InstallModal } from './InstallModal';
+import { HouseholdMembersPanel } from './resident/HouseholdMembersPanel';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -120,6 +121,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <X size={16} />
             </button>
           </div>
+
+          {/* Household invites + join approvals (owner only; audit F3) */}
+          {import.meta.env.VITE_AUTH_ENABLED === 'true' && (
+            <div className="mt-3.5">
+              <HouseholdMembersPanel />
+            </div>
+          )}
 
           {/* Standalone PWA Download Section (website only, hidden once installed) */}
           {!isInstalled && (

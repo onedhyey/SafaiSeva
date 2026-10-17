@@ -219,9 +219,10 @@ export function redeemTicket(transitType: string): Promise<RedeemResponse> {
 }
 
 // ---- Household onboarding (auth-on path) ----
+// Joining takes an invite code the owner shares, and the owner approves the request — the
+// public household code is not enough on its own (audit F3).
 export interface CreateHouseholdResponse {
   code: string;
-  joinCode: string;
   nearbyExisting?: string | null;
 }
 
@@ -236,10 +237,31 @@ export function createHousehold(payload: {
   });
 }
 
-export function joinHousehold(code: string): Promise<{ code: string }> {
-  return apiFetch<{ code: string }>('/api/household/join', {
+export function requestToJoinHousehold(token: string): Promise<{ status: 'pending'; requestId: string }> {
+  return apiFetch<{ status: 'pending'; requestId: string }>('/api/household/join', {
     method: 'POST',
-    body: JSON.stringify({ code: code.trim() }),
+    body: JSON.stringify({ token: token.trim() }),
+  });
+}
+
+export function createHouseholdInvite(): Promise<{ token: string; expiresAt: string }> {
+  return apiFetch<{ token: string; expiresAt: string }>('/api/household/invite', { method: 'POST' });
+}
+
+export interface JoinRequest {
+  id: string;
+  createdAt: string;
+  name: string;
+}
+
+export function getJoinRequests(): Promise<{ requests: JoinRequest[] }> {
+  return apiFetch<{ requests: JoinRequest[] }>('/api/household/requests');
+}
+
+export function decideJoinRequest(id: string, approve: boolean): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/api/household/requests/${encodeURIComponent(id)}/decide`, {
+    method: 'POST',
+    body: JSON.stringify({ approve }),
   });
 }
 
@@ -355,13 +377,13 @@ export function getOfficerAnomalies(): Promise<{ anomalies: OfficerAnomaly[] }> 
   return apiFetch<{ anomalies: OfficerAnomaly[] }>('/api/officer/anomalies', { asOfficer: true });
 }
 
-// ---- Resident ward leaderboard (Impact tab; schema 0017) ----
+// ---- Resident ward leaderboard (Impact tab; v_ward_leaderboard_live) ----
+// Ranks by credits earned in the last 30 days; carries no household codes or addresses.
 export interface LeaderboardEntry {
   rank: number;
-  householdCode: string;
-  society: string;
-  streak: number;
+  label: string;
   credits: number;
+  isYou: boolean;
 }
 
 export function getWardLeaderboard(): Promise<{ leaderboard: LeaderboardEntry[] }> {

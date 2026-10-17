@@ -24,6 +24,10 @@ export const env = {
   geminiModel: pick('GEMINI_MODEL') || 'gemini-3.6-flash',
 
   authEnabled: String(pick('VITE_AUTH_ENABLED') ?? '').toLowerCase() === 'true',
+  // Anonymous device / demo-role identity outside NODE_ENV=development (audit F1/F2).
+  // Only for a deliberately separate public demo with no real rewards.
+  allowDemoIdentity: String(pick('ALLOW_DEMO_IDENTITY') ?? '').toLowerCase() === 'true',
+  nodeEnv: pick('NODE_ENV'),
   clerkSecretKey: pick('CLERK_SECRET_KEY'),
   // Optional hardening: comma-separated list of origins allowed to mint the session
   // tokens we accept (defaults to APP_URL when set). Leave unset to skip the check.

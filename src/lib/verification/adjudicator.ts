@@ -100,7 +100,11 @@ export function adjudicate(input: AdjudicateInput): Decision {
   if (fraudSignals.includes('geo_outside')) findings.push({ code: 'OUTSIDE_GEOFENCE' });
   if (fraudSignals.includes('window_outside')) findings.push({ code: 'OUTSIDE_WINDOW' });
   if (fraudSignals.includes('duplicate_phash')) findings.push({ code: 'DUPLICATE_EVIDENCE' });
-  const softAnomaly = fraudSignals.includes('velocity') || fraudSignals.includes('burst');
+  // Soft anomalies never auto-pay: a human looks first. stale_capture / clock_skew mean the
+  // claimed capture time could not be trusted (server/captureTime.ts).
+  const softAnomaly = ['velocity', 'burst', 'stale_capture', 'clock_skew'].some((s) =>
+    fraudSignals.includes(s)
+  );
   const hasHardBlock = findings.some((f) => HARD_BLOCKS.includes(f.code));
 
   // --- content evaluation (independent of the blocks above) ---

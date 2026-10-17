@@ -7,7 +7,7 @@ import { admin } from './supabaseAdmin.ts';
 import { resolvePrincipal, resolveWorker, resolveOfficer } from './principal.ts';
 import { dHash, sha256, decodeDataUrl } from './phash.ts';
 import { extractFromPhoto, extractFromVideo } from './gemini.ts';
-import { runFraudChecks, istDate, workerCapExceeded } from './fraud.ts';
+import { runFraudChecks, istDate } from './fraud.ts';
 import {
   uploadEvidence,
   createEvidenceUploadUrl,
@@ -15,7 +15,8 @@ import {
   isOwnedEvidenceKey,
 } from './storage.ts';
 import { signTicket } from './qrToken.ts';
-import { haversineMeters } from './geo.ts';
+import { resolveCaptureTime } from './captureTime.ts';
+import { rpcError } from './rpcErrors.ts';
 import {
   verifyLimiter,
   signLimiter,
@@ -28,6 +29,37 @@ import { renderReason } from '../src/lib/verification/reasonCodes.ts';
 
 function fail(res: Response, status: number, message: string) {
   return res.status(status).json({ error: message });
+}
+
+// For catch blocks: errors we raised on purpose carry a 4xx/503 status and a message meant
+// for the user; anything else is unexpected and must not leak internals (audit F10).
+function failFrom(res: Response, e: any, label: string) {
+  const status = Number(e?.status);
+  if (Number.isInteger(status) && status >= 400 && status < 500) return fail(res, status, e.message);
+  if (status === 503) return fail(res, 503, e.message);
+  console.error(`[${label}]`, e);
+  return fail(res, 500, 'Something went wrong on our side. Please try again.');
+}
+
+// For a failed SQL decision function / unexpected PostgREST error.
+function failDb(res: Response, error: { message?: string } | null | undefined) {
+  const { status, message } = rpcError(error);
+  return fail(res, status, message);
+}
+
+// Settlement hold + rules for awarding milestones after a verified decision. Best effort:
+// the handover decision is already committed; a milestone failure is logged, not surfaced.
+async function awardMilestones(householdId: string, actor: string, holdHours: number) {
+  const { data, error } = await admin().rpc('award_bin_milestones', {
+    p_household: householdId,
+    p_actor: actor,
+    p_hold_hours: holdHours,
+  });
+  if (error) {
+    console.error('[milestones] award failed:', error.message);
+    return [] as { milestone: string; credits: number }[];
+  }
+  return (data ?? []) as { milestone: string; credits: number }[];
 }
 
 async function activeRules(): Promise<{ version: number; rules: RewardRules }> {
@@ -71,6 +103,13 @@ async function householdForUser(userId: string): Promise<HouseholdCtx | null> {
     binsOnboardedAt: hh.bins_onboarded_at ?? null,
   };
 }
+
+// A karmachari must be within this distance of a geolocated household to credit it at the
+// door (audit F11). Generous for GPS error in dense lanes; households without a point skip it.
+const DOORSTEP_MAX_DISTANCE_M = 150;
+
+// The pilot onboards a single ward; new households are placed in it.
+const PILOT_WARD_CODE = process.env.PILOT_WARD_CODE?.trim() || 'W12-NAVRANGPURA';
 
 function cleanStreams(input: any): WasteStream[] {
   if (!Array.isArray(input)) return [];
@@ -122,7 +161,7 @@ export function mountApiRoutes(app: Express) {
         redeem: rules.redeem, // { janmarg_brts, ahmedabad_metro, janmarg_day_pass }
       });
     } catch (e: any) {
-      return fail(res, e.status ?? 500, e.message ?? 'wallet error');
+      return failFrom(res, e, 'wallet');
     }
   });
 
@@ -144,47 +183,20 @@ export function mountApiRoutes(app: Express) {
         return fail(res, 400, 'binCount must be between 0 and 8.');
       }
       const newCount = Math.round(raw);
-      const oldCount = hh.binCount;
 
       const db = admin();
       const { rules } = await activeRules();
 
-      const crossed: { milestone: 'two_bins' | 'four_bins' | 'six_bins'; credits: number }[] = [];
-      if (oldCount < 2 && newCount >= 2)
-        crossed.push({ milestone: 'two_bins', credits: rules.milestones.two_bins });
-      if (oldCount < 4 && newCount >= 4)
-        crossed.push({ milestone: 'four_bins', credits: rules.milestones.four_bins });
-      if (oldCount < 6 && newCount >= 6)
-        crossed.push({ milestone: 'six_bins', credits: rules.milestones.six_bins });
-
-      const awarded: { milestone: string; credits: number }[] = [];
-      for (const c of crossed) {
-        const { error: msErr } = await db
-          .from('bin_milestones')
-          .insert({ household_id: hh.id, milestone: c.milestone, credits_awarded: c.credits });
-        if (msErr) {
-          if (/duplicate key/i.test(msErr.message)) continue; // already awarded
-          console.error('[bins] milestone insert:', msErr.message);
-          continue;
-        }
-        const { error: ledErr } = await db.from('credit_ledger').insert({
-          household_id: hh.id,
-          entry_type: 'milestone',
-          amount: c.credits,
-          reason: `${
-            c.milestone === 'two_bins' ? 'Two-bin' : c.milestone === 'four_bins' ? 'Four-bin' : 'Six-bin'
-          } setup milestone`,
-          effective_at: new Date().toISOString(),
-          created_by: principal.userId,
-        });
-        if (ledErr) console.error('[bins] ledger insert:', ledErr.message);
-        else awarded.push({ milestone: c.milestone, credits: c.credits });
-      }
-
-      await db
+      const { error: updErr } = await db
         .from('households')
         .update({ bin_count: newCount, bins_onboarded_at: new Date().toISOString() })
         .eq('id', hh.id);
+      if (updErr) return failDb(res, updErr);
+
+      // The bin count is self-reported, so on its own it pays nothing (audit F6): each
+      // milestone also needs verified handovers confirming enough streams, and settles
+      // through the normal hold. award_bin_milestones checks both under the household lock.
+      const awarded = await awardMilestones(hh.id, principal.userId, rules.settlement_hold_hours);
 
       const { data: bal } = await db
         .from('v_household_balance')
@@ -199,7 +211,7 @@ export function mountApiRoutes(app: Express) {
         balance: bal?.settled_balance ?? 0,
       });
     } catch (e: any) {
-      return fail(res, e.status ?? 500, e.message ?? 'bins error');
+      return failFrom(res, e, 'bins');
     }
   });
 
@@ -223,7 +235,7 @@ export function mountApiRoutes(app: Express) {
       if (!signed) return fail(res, 415, `Unsupported media type: ${contentType || 'none'}.`);
       return res.json(signed);
     } catch (e: any) {
-      return fail(res, e.status ?? 500, e.message ?? 'sign error');
+      return failFrom(res, e, 'sign');
     }
   });
 
@@ -248,7 +260,14 @@ export function mountApiRoutes(app: Express) {
       const photoKey: string | undefined = typeof body.photoKey === 'string' ? body.photoKey : undefined;
       const videoKey: string | undefined = typeof body.videoKey === 'string' ? body.videoKey : undefined;
       const videoFrames: string[] = Array.isArray(body.videoFrames) ? body.videoFrames : [];
-      const capturedAt: string = body.clientCapturedAt || new Date().toISOString();
+      // The client's capture time is honoured only within a bounded offline delay; otherwise
+      // server time is used and the submission goes to a human (audit F7).
+      const capture = resolveCaptureTime(body.clientCapturedAt);
+      const capturedAt = capture.effectiveAt;
+      const claimedCapturedAt =
+        typeof body.clientCapturedAt === 'string' && Number.isFinite(Date.parse(body.clientCapturedAt))
+          ? body.clientCapturedAt
+          : null;
       const lat = typeof body.clientLat === 'number' ? body.clientLat : null;
       const lng = typeof body.clientLng === 'number' ? body.clientLng : null;
 
@@ -289,13 +308,30 @@ export function mountApiRoutes(app: Express) {
       const collectionDate = istDate(capturedAt);
 
       // --- idempotency: reuse an existing pending row for this attempt key ---
-      let handoverId: string | undefined = body.handoverId;
-      const idemKey: string | undefined = body.idempotencyKey;
+      let handoverId: string | undefined =
+        typeof body.handoverId === 'string' && body.handoverId ? body.handoverId : undefined;
+      const idemKey: string | undefined =
+        typeof body.idempotencyKey === 'string' && body.idempotencyKey ? body.idempotencyKey : undefined;
+
+      // A second attempt names its handover: it must be this household's, and still open
+      // (audit F4 — previously any id was accepted and overwritten).
+      if (handoverId) {
+        const { data: own } = await db
+          .from('handovers')
+          .select('id, status')
+          .eq('id', handoverId)
+          .eq('household_id', hh.id)
+          .maybeSingle();
+        if (!own) return fail(res, 403, 'This handover does not belong to your household.');
+        if (own.status === 'verified') return fail(res, 409, 'This handover was already approved.');
+      }
+
       if (!handoverId && idemKey) {
         const { data: existing } = await db
           .from('handovers')
           .select('id, status, credits_awarded, confirmed_streams, decision_reason_code, decision_reason_text')
           .eq('idempotency_key', idemKey)
+          .eq('household_id', hh.id)
           .maybeSingle();
         if (existing && existing.status !== 'pending') {
           return res.json({
@@ -323,7 +359,7 @@ export function mountApiRoutes(app: Express) {
             attempt,
             media_kind: mediaKind,
             declared_streams: declaredStreams,
-            client_captured_at: capturedAt,
+            client_captured_at: claimedCapturedAt,
             client_lat: lat,
             client_lng: lng,
             client_accuracy_m: typeof body.clientAccuracyM === 'number' ? body.clientAccuracyM : null,
@@ -333,13 +369,14 @@ export function mountApiRoutes(app: Express) {
           })
           .select('id')
           .single();
-        if (error) return fail(res, 500, `create handover failed: ${error.message}`);
+        if (error) return failDb(res, error);
         handoverId = data.id;
       } else {
         await db
           .from('handovers')
           .update({ attempt, media_kind: mediaKind, status: 'pending' })
-          .eq('id', handoverId);
+          .eq('id', handoverId)
+          .eq('household_id', hh.id);
       }
 
       // --- hashes (from the still image we have) ---
@@ -357,14 +394,19 @@ export function mountApiRoutes(app: Express) {
       }
 
       // --- structural fraud checks (authoritative) ---
-      const fraudSignals = await runFraudChecks({
-        householdId: hh.id,
-        collectionDate,
-        capturedAt,
-        lat,
-        lng,
-        phash,
-      });
+      const fraudSignals = [
+        ...capture.signals,
+        ...(await runFraudChecks({
+          householdId: hh.id,
+          collectionDate,
+          capturedAt,
+          lat,
+          lng,
+          phash,
+          contentHash,
+          handoverId,
+        })),
+      ];
 
       // --- AI evidence extraction ---
       let extract;
@@ -460,48 +502,51 @@ export function mountApiRoutes(app: Express) {
             signal,
             severity: ['daily_limit', 'geo_outside', 'window_outside', 'duplicate_phash'].includes(signal)
               ? 'block'
+              : signal === 'similar_own'
+              ? 'info'
               : 'warn',
           }))
         );
       }
 
-      // --- settle: on verified, write the ledger earn row with the hold ---
-      let settleAt: string | null = null;
-      if (decision.status === 'verified') {
-        settleAt = new Date(Date.now() + rules.settlement_hold_hours * 3600_000).toISOString();
-        const { error: ledgerErr } = await db.from('credit_ledger').insert({
-          household_id: hh.id,
-          entry_type: 'earn',
-          amount: decision.creditsAwarded,
-          handover_id: handoverId,
-          reason: `Handover ${collectionDate}: ${decision.confirmedStreams.join('+')}`,
-          effective_at: settleAt,
-          created_by: principal.userId,
+      // --- finalize: decision + ledger in one transaction under the household lock ---
+      // (audit F5 — the earn row used to be written before the handover update, so a
+      // same-day race could pay a submission that was then rejected.)
+      const dailyLimit = renderReason('DAILY_LIMIT_REACHED');
+      const { data: outcome, error: decErr } = await db.rpc('record_handover_decision', {
+        p_handover: handoverId,
+        p_household: hh.id,
+        p_status: decision.status,
+        p_confirmed_streams: decision.confirmedStreams,
+        p_credits: decision.status === 'verified' ? decision.creditsAwarded : 0,
+        p_rules_version: rulesVersion,
+        p_reason_code: decision.reasonCode,
+        p_reason_text: decision.reasonText,
+        p_hold_hours: rules.settlement_hold_hours,
+        p_actor: principal.userId,
+        p_ledger_reason: `Handover ${collectionDate}: ${decision.confirmedStreams.join('+')}`,
+        p_daily_limit_text: dailyLimit.text,
+      });
+      if (decErr) return failDb(res, decErr);
+
+      const settled: any = outcome;
+      if (settled?.daily_limit) {
+        return res.json({
+          handoverId,
+          status: 'rejected',
+          reasonCode: dailyLimit.code,
+          reasonText: dailyLimit.text,
+          creditsAwarded: 0,
+          confirmedStreams: [],
         });
-        if (ledgerErr && !/duplicate key/i.test(ledgerErr.message)) {
-          console.error('[verify] ledger insert:', ledgerErr.message);
-        }
       }
+      const settleAt: string | null = settled?.settle_at ?? null;
 
-      // --- finalize handover ---
-      const { error: updErr } = await db
-        .from('handovers')
-        .update({
-          status: decision.status,
-          confirmed_streams: decision.confirmedStreams,
-          credits_awarded: decision.creditsAwarded,
-          reward_rules_version: rulesVersion,
-          decision_reason_code: decision.reasonCode,
-          decision_reason_text: decision.reasonText,
-          settle_at: settleAt,
-        })
-        .eq('id', handoverId);
-
-      if (updErr && /handovers_one_verified_per_day/.test(updErr.message)) {
-        const r = renderReason('DAILY_LIMIT_REACHED');
-        await db.from('handovers').update({ status: 'rejected', decision_reason_code: r.code, decision_reason_text: r.text }).eq('id', handoverId);
-        return res.json({ handoverId, status: 'rejected', reasonCode: r.code, reasonText: r.text, creditsAwarded: 0, confirmedStreams: [] });
-      }
+      // A verified handover may unlock a bin milestone (audit F6).
+      const milestonesAwarded =
+        decision.status === 'verified'
+          ? await awardMilestones(hh.id, principal.userId, rules.settlement_hold_hours)
+          : [];
 
       return res.json({
         handoverId,
@@ -513,6 +558,7 @@ export function mountApiRoutes(app: Express) {
         creditsAwarded: decision.creditsAwarded,
         confirmedStreams: decision.confirmedStreams,
         fraudSignals: decision.fraudSignals,
+        milestonesAwarded,
         evidence: {
           observation: extract.evidence.observation,
           streams: extract.evidence.streams,
@@ -524,7 +570,7 @@ export function mountApiRoutes(app: Express) {
       });
     } catch (e: any) {
       console.error('[verify] error:', e);
-      return fail(res, e.status ?? 500, e.message ?? 'verification error');
+      return failFrom(res, e, 'verification');
     }
   });
 
@@ -594,7 +640,7 @@ export function mountApiRoutes(app: Express) {
         balance: bal?.settled_balance ?? 0,
       });
     } catch (e: any) {
-      return fail(res, e.status ?? 500, e.message ?? 'redeem error');
+      return failFrom(res, e, 'redeem');
     }
   });
 
@@ -620,6 +666,9 @@ export function mountApiRoutes(app: Express) {
         .maybeSingle();
       if (!member) return fail(res, 403, 'Not your handover.');
       if (h.status === 'verified') return fail(res, 409, 'This handover was already approved.');
+      // Only a decided, unpaid handover can be escalated — and only once.
+      if (h.status === 'in_review') return fail(res, 409, 'This handover is already with a karmachari.');
+      if (h.status === 'pending') return fail(res, 409, 'This handover is still being checked.');
 
       await db.from('handovers').update({ status: 'in_review', decision_reason_code: 'IN_REVIEW_CONFLICT' }).eq('id', h.id);
       await db.from('fraud_flags').insert({
@@ -633,7 +682,7 @@ export function mountApiRoutes(app: Express) {
       const r = renderReason('IN_REVIEW_CONFLICT');
       return res.json({ status: 'in_review', reasonText: r.text });
     } catch (e: any) {
-      return fail(res, e.status ?? 500, e.message ?? 'dispute error');
+      return failFrom(res, e, 'dispute');
     }
   });
 
@@ -679,21 +728,25 @@ export function mountApiRoutes(app: Express) {
         overrideRate: 0,
       });
     } catch (e: any) {
-      return fail(res, e.status ?? 500, e.message ?? 'worker profile error');
+      return failFrom(res, e, 'worker profile');
     }
   });
 
   // GET /api/review-queue — handovers the backend routed to a human.
   app.get('/api/review-queue', readLimiter, async (req: Request, res: Response) => {
     try {
-      await resolveWorker(req);
-      const { data } = await admin()
+      // A karmachari only sees their own ward's queue (audit F11).
+      const worker = await resolveWorker(req);
+      if (!worker.wardId) return res.json({ items: [] });
+      const { data, error } = await admin()
         .from('v_review_queue')
         .select('*')
+        .eq('ward_id', worker.wardId)
         .order('created_at', { ascending: true });
+      if (error) return failDb(res, error);
       return res.json({ items: data ?? [] });
     } catch (e: any) {
-      return fail(res, e.status ?? 500, e.message ?? 'review-queue error');
+      return failFrom(res, e, 'review-queue');
     }
   });
 
@@ -701,80 +754,40 @@ export function mountApiRoutes(app: Express) {
   app.post('/api/review-queue/:id/decide', mutationLimiter, async (req: Request, res: Response) => {
     try {
       const worker = await resolveWorker(req);
-      const db = admin();
       const decision = req.body?.decision === 'approve' ? 'approve' : 'reject';
-
-      const { data: h } = await db
-        .from('handovers')
-        .select('id, household_id, status, declared_streams, confirmed_streams, collection_date, reward_rules_version')
-        .eq('id', req.params.id)
-        .maybeSingle();
-      if (!h) return fail(res, 404, 'Handover not found.');
-      if (h.status !== 'in_review') return fail(res, 409, 'This handover is no longer in review.');
-
       const reviewer = `Karmachari ${worker.name} (${worker.workerCode})`;
-      const now = new Date().toISOString();
-
-      if (decision === 'reject') {
-        const reason = String(req.body?.reason || 'Not separated at source').slice(0, 200);
-        await db
-          .from('handovers')
-          .update({
-            status: 'rejected',
-            credits_awarded: 0,
-            decision_reason_code: 'IN_REVIEW_CONFLICT',
-            decision_reason_text: `Karmachari review: ${reason}`,
-            reviewed_by: worker.userId,
-            reviewed_at: now,
-            review_note: String(req.body?.note || '').slice(0, 500) || null,
-          })
-          .eq('id', h.id);
-        return res.json({ status: 'rejected' });
-      }
-
-      // approve: worker vouches for it → credit the confirmed (or declared) streams now.
+      const note = String(req.body?.note || '').slice(0, 500) || null;
       const { version, rules } = await activeRules();
-      const streams: string[] =
-        (h.confirmed_streams?.length ? h.confirmed_streams : h.declared_streams) ?? [];
-      const credits = Math.min(streams.length * rules.per_confirmed_stream, rules.daily_cap_credits);
-      const settleAt = new Date(Date.now() + rules.settlement_hold_hours * 3600_000).toISOString();
 
-      const { error: updErr } = await db
-        .from('handovers')
-        .update({
-          status: 'verified',
-          confirmed_streams: streams,
-          credits_awarded: credits,
-          reward_rules_version: h.reward_rules_version ?? version,
-          decision_reason_code: 'OK_VERIFIED',
-          decision_reason_text: `Approved by ${reviewer} after review.`,
-          settle_at: settleAt,
-          reviewed_by: worker.userId,
-          reviewed_at: now,
-          review_note: String(req.body?.note || '').slice(0, 500) || null,
-        })
-        .eq('id', h.id);
-
-      if (updErr && /handovers_one_verified_per_day/.test(updErr.message)) {
-        return fail(res, 409, 'This household already has an approved handover for that day.');
-      }
-      if (updErr) return fail(res, 500, updErr.message);
-
-      const { error: ledErr } = await db.from('credit_ledger').insert({
-        household_id: h.household_id,
-        entry_type: 'earn',
-        amount: credits,
-        handover_id: h.id,
-        reason: `Handover ${h.collection_date}: approved on review (${streams.join('+')})`,
-        effective_at: settleAt,
-        created_by: worker.userId,
+      // Ward scope, in-review status, the one-per-day rule and the ledger write all happen
+      // in one transaction under the household lock (audit F5 / F11).
+      const { data, error } = await admin().rpc('decide_review', {
+        p_handover: req.params.id,
+        p_worker: worker.workerId,
+        p_decision: decision,
+        p_per_stream: rules.per_confirmed_stream,
+        p_cap: rules.daily_cap_credits,
+        p_hold_hours: rules.settlement_hold_hours,
+        p_rules_version: version,
+        p_reason_text:
+          decision === 'approve'
+            ? `Approved by ${reviewer} after review.`
+            : `Karmachari review: ${String(req.body?.reason || 'Not separated at source').slice(0, 200)}`,
+        p_note: note,
       });
-      if (ledErr && !/duplicate key/i.test(ledErr.message)) {
-        console.error('[review] ledger insert:', ledErr.message);
+      if (error) return failDb(res, error);
+
+      const out: any = data;
+      if (out.status === 'verified' && out.household_id) {
+        await awardMilestones(out.household_id, worker.userId, rules.settlement_hold_hours);
       }
-      return res.json({ status: 'verified', creditsAwarded: credits, settleAt });
+      return res.json({
+        status: out.status,
+        creditsAwarded: out.credits_awarded ?? 0,
+        settleAt: out.settle_at ?? null,
+      });
     } catch (e: any) {
-      return fail(res, e.status ?? 500, e.message ?? 'decide error');
+      return failFrom(res, e, 'decide');
     }
   });
 
@@ -783,83 +796,39 @@ export function mountApiRoutes(app: Express) {
   app.post('/api/worker/issue', mutationLimiter, async (req: Request, res: Response) => {
     try {
       const worker = await resolveWorker(req);
-      const db = admin();
 
       const code = String(req.body?.householdCode || '').trim();
       if (!code) return fail(res, 400, 'A household code is required.');
       const streams = cleanStreams(req.body?.streams);
       if (streams.length < 2) return fail(res, 400, 'Confirm at least wet and dry.');
 
-      const issuedDate = istDate(new Date().toISOString());
-      if (await workerCapExceeded(worker.workerId, issuedDate)) {
-        return fail(res, 429, `Daily issuance cap (${worker.dailyIssueCap}) reached.`);
-      }
-
-      const { data: hh } = await db
-        .from('households')
-        .select('id')
-        .eq('code', code)
-        .maybeSingle();
-      if (!hh) return fail(res, 404, `Household ${code} is not registered.`);
-
       const { rules } = await activeRules();
       const credits = rules.worker_issue_credits ?? 2;
+      const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
-      // A verified handover row so it shows in the household's history…
-      const { data: handover, error: hErr } = await db
-        .from('handovers')
-        .insert({
-          household_id: hh.id,
-          submitted_by: worker.userId,
-          collection_date: issuedDate,
-          attempt: 1,
-          media_kind: 'photo',
-          declared_streams: streams,
-          confirmed_streams: streams,
-          status: 'verified',
-          credits_awarded: credits,
-          decision_reason_code: 'OK_VERIFIED',
-          decision_reason_text: `Doorstep verification by Karmachari ${worker.name} (${worker.workerCode}).`,
-          reviewed_by: worker.userId,
-          reviewed_at: new Date().toISOString(),
-          client_lat: typeof req.body?.workerLat === 'number' ? req.body.workerLat : null,
-          client_lng: typeof req.body?.workerLng === 'number' ? req.body.workerLng : null,
-        })
-        .select('id')
-        .single();
-      if (hErr && /handovers_one_verified_per_day/.test(hErr.message)) {
-        return fail(res, 409, `${code} already has an approved handover today.`);
-      }
-      if (hErr) return fail(res, 500, hErr.message);
-
-      await db.from('worker_issuances').insert({
-        worker_id: worker.workerId,
-        household_id: hh.id,
-        household_code: code,
-        issued_date: issuedDate,
-        streams,
-        worker_lat: typeof req.body?.workerLat === 'number' ? req.body.workerLat : null,
-        worker_lng: typeof req.body?.workerLng === 'number' ? req.body.workerLng : null,
-        credits,
-        handover_id: handover.id,
+      // Ward scope, worker-at-the-door distance, the daily cap and the one-per-day rule are
+      // enforced with handover + issuance + ledger in one transaction (audit F5 / F11).
+      const { data, error } = await admin().rpc('issue_doorstep', {
+        p_worker: worker.workerId,
+        p_household_code: code,
+        p_streams: streams,
+        p_credits: credits,
+        p_worker_lat: num(req.body?.workerLat),
+        p_worker_lng: num(req.body?.workerLng),
+        p_max_distance_m: DOORSTEP_MAX_DISTANCE_M,
+        p_reason_text: `Doorstep verification by Karmachari ${worker.name} (${worker.workerCode}).`,
       });
-
-      const { error: ledErr } = await db.from('credit_ledger').insert({
-        household_id: hh.id,
-        entry_type: 'earn',
-        amount: credits,
-        handover_id: handover.id,
-        reason: `Doorstep issuance by ${worker.workerCode}`,
-        effective_at: new Date().toISOString(), // physically verified → no hold
-        created_by: worker.userId,
-      });
-      if (ledErr && !/duplicate key/i.test(ledErr.message)) {
-        console.error('[worker/issue] ledger:', ledErr.message);
+      if (error) {
+        if (/^worker_cap/.test(error.message)) {
+          return fail(res, 429, `Daily issuance cap (${worker.dailyIssueCap}) reached.`);
+        }
+        return failDb(res, error);
       }
 
-      return res.json({ householdCode: code, creditsAwarded: credits });
+      const out: any = data;
+      return res.json({ householdCode: out.household_code ?? code, creditsAwarded: out.credits_awarded });
     } catch (e: any) {
-      return fail(res, e.status ?? 500, e.message ?? 'issue error');
+      return failFrom(res, e, 'issue');
     }
   });
 
@@ -924,7 +893,7 @@ export function mountApiRoutes(app: Express) {
         })),
       });
     } catch (e: any) {
-      return fail(res, e.status ?? 500, e.message ?? 'officer dashboard error');
+      return failFrom(res, e, 'officer dashboard');
     }
   });
 
@@ -954,165 +923,173 @@ export function mountApiRoutes(app: Express) {
 
       return res.json({ anomalies });
     } catch (e: any) {
-      return fail(res, e.status ?? 500, e.message ?? 'officer anomalies error');
+      return failFrom(res, e, 'officer anomalies');
     }
   });
 
   // ---------------------------------------------------------------------------------
-  // GET /api/ward/leaderboard — the resident Impact-tab leaderboard (audit F1 / T3.3).
-  // Backed by v_ward_leaderboard (schema 0017): an imported baseline overlaid with each
-  // household's live settled balance. Anonymised to society + credits before returning.
-  // Any resident principal may read it; it is scoped to the caller's ward.
+  // GET /api/ward/leaderboard — the resident Impact-tab leaderboard.
+  // Backed by v_ward_leaderboard_live (0019): credits EARNED in the last 30 days, so
+  // redeeming never lowers a rank (audit F15). Nothing identifying leaves the server —
+  // no household codes, no addresses (audit F3); only the caller's own row is marked.
   // ---------------------------------------------------------------------------------
   app.get('/api/ward/leaderboard', readLimiter, async (req: Request, res: Response) => {
     try {
       const principal = await resolvePrincipal(req);
       const db = admin();
 
-      let wardId: string | null = null;
       const hh = await householdForUser(principal.userId);
-      if (hh) {
-        const { data } = await db.from('households').select('ward_id').eq('id', hh.id).maybeSingle();
-        wardId = (data?.ward_id as string | undefined) ?? null;
-      }
-      if (!wardId) {
-        const { data: w } = await db.from('wards').select('id').eq('code', 'W12-NAVRANGPURA').maybeSingle();
-        wardId = (w?.id as string | undefined) ?? null;
-      }
+      if (!hh) return res.json({ leaderboard: [] });
+      const { data: own } = await db.from('households').select('ward_id').eq('id', hh.id).maybeSingle();
+      const wardId = (own?.ward_id as string | undefined) ?? null;
       if (!wardId) return res.json({ leaderboard: [] });
 
-      const { data } = await db
-        .from('v_ward_leaderboard')
-        .select('*')
+      const { data, error } = await db
+        .from('v_ward_leaderboard_live')
+        .select('household_id, credits_30d, rank')
         .eq('ward_id', wardId)
-        .order('credits', { ascending: false })
-        .order('sort_order', { ascending: true })
-        .limit(12);
+        .order('rank', { ascending: true })
+        .limit(10);
+      if (error) return failDb(res, error);
 
-      const leaderboard = (data ?? []).slice(0, 8).map((r: any, i: number) => ({
-        rank: i + 1,
-        householdCode: r.household_ref,
-        society: r.society,
-        streak: r.streak,
-        credits: r.credits,
+      const rows = data ?? [];
+      const leaderboard = rows.map((r: any) => ({
+        rank: Number(r.rank),
+        isYou: r.household_id === hh.id,
+        label: r.household_id === hh.id ? 'Your household' : `Household #${Number(r.rank)}`,
+        credits: r.credits_30d,
       }));
-      return res.json({ leaderboard });
+
+      // The caller's own standing, even when outside the top 10.
+      if (!leaderboard.some((r) => r.isYou)) {
+        const { data: me } = await db
+          .from('v_ward_leaderboard_live')
+          .select('credits_30d, rank')
+          .eq('household_id', hh.id)
+          .maybeSingle();
+        if (me) {
+          leaderboard.push({
+            rank: Number(me.rank),
+            isYou: true,
+            label: 'Your household',
+            credits: me.credits_30d,
+          });
+        }
+      }
+      return res.json({ leaderboard, period: '30d' });
     } catch (e: any) {
-      return fail(res, e.status ?? 500, e.message ?? 'ward leaderboard error');
+      return failFrom(res, e, 'ward leaderboard');
     }
   });
 
   // ---------------------------------------------------------------------------------
-  // Household onboarding for the auth-on path. A signed-in resident with no household
-  // either creates one (and gets a code to share with family) or joins an existing one
-  // by code. Everyone on one household shares its balance + the per-household daily
-  // limits, so extra family accounts cannot multiply credits.
-  //   POST /api/household/create  { address?, lat?, lng? }  -> { code, joinCode, nearbyExisting? }
-  //   POST /api/household/join    { code }                  -> { code }
+  // Household onboarding. A signed-in resident with no household creates one, or asks to
+  // join an existing one with an invite the owner shared; the owner approves each request
+  // (audit F3 — the public household code used to be enough to join and spend). Everyone
+  // on a household shares its balance and its per-household daily limits.
+  //   POST /api/household/create                { address?, lat?, lng? } -> { code, nearbyExisting }
+  //   POST /api/household/invite      (owner)                            -> { token, expiresAt }
+  //   POST /api/household/join                  { token }                -> { status: 'pending' }
+  //   GET  /api/household/requests    (owner)                            -> { requests: [...] }
+  //   POST /api/household/requests/:id/decide (owner) { approve: bool }  -> { status }
   // ---------------------------------------------------------------------------------
   app.post('/api/household/create', mutationLimiter, async (req: Request, res: Response) => {
     try {
       const principal = await resolvePrincipal(req);
-      if (await householdForUser(principal.userId)) {
-        return fail(res, 409, 'This account is already linked to a household.');
-      }
-      const db = admin();
-
-      const { data: ward } = await db
-        .from('wards')
-        .select('id')
-        .eq('code', 'W12-NAVRANGPURA')
-        .maybeSingle();
-      if (!ward?.id) return fail(res, 500, 'No ward reference is configured.');
-
-      const lat = typeof req.body?.lat === 'number' ? req.body.lat : null;
-      const lng = typeof req.body?.lng === 'number' ? req.body.lng : null;
-      const address = String(req.body?.address || '').trim().slice(0, 240) || 'Address pending';
-
-      // Non-blocking: is there already a household within ~25 m of this fix?
-      let nearbyExisting: string | null = null;
-      if (lat != null && lng != null) {
-        const { data: rows } = await db
-          .from('households')
-          .select('code, latitude, longitude')
-          .not('latitude', 'is', null)
-          .limit(1000);
-        for (const r of rows ?? []) {
-          if (r.latitude == null || r.longitude == null) continue;
-          if (haversineMeters(lat, lng, r.latitude, r.longitude) <= 25) {
-            nearbyExisting = r.code as string;
-            break;
-          }
-        }
-      }
-
-      let code = genHouseholdCode();
-      for (let attempt = 0; attempt < 6; attempt++) {
-        const { data, error } = await db
-          .from('households')
-          .insert({
-            code,
-            address,
-            ward_id: ward.id,
-            latitude: lat,
-            longitude: lng,
-            bin_count: 1,
-            bin_target: 6,
-          })
-          .select('id, code')
-          .single();
-        if (!error && data) {
-          const { error: memErr } = await db
-            .from('household_members')
-            .insert({ household_id: data.id, user_id: principal.userId, member_role: 'owner' });
-          if (memErr) return fail(res, 500, memErr.message);
-          return res.json({ code: data.code, joinCode: data.code, nearbyExisting });
-        }
-        if (error && /duplicate key|unique/i.test(error.message)) {
-          code = genHouseholdCode();
-          continue;
-        }
-        return fail(res, 500, error?.message || 'Could not create household.');
-      }
-      return fail(res, 500, 'Could not allocate a household code — try again.');
+      const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+      const { data, error } = await admin().rpc('create_household', {
+        p_user: principal.userId,
+        p_ward_code: PILOT_WARD_CODE,
+        p_address: String(req.body?.address || '').trim().slice(0, 240),
+        p_lat: num(req.body?.lat),
+        p_lng: num(req.body?.lng),
+      });
+      if (error) return failDb(res, error);
+      const out: any = data;
+      return res.json({ code: out.code, nearbyExisting: out.nearby_existing ?? null });
     } catch (e: any) {
-      return fail(res, e.status ?? 500, e.message ?? 'create error');
+      return failFrom(res, e, 'create');
+    }
+  });
+
+  app.post('/api/household/invite', mutationLimiter, async (req: Request, res: Response) => {
+    try {
+      const principal = await resolvePrincipal(req);
+      const hh = await householdForUser(principal.userId);
+      if (!hh) return fail(res, 409, 'No household is linked to this session.');
+      const { data, error } = await admin().rpc('create_household_invite', {
+        p_household: hh.id,
+        p_owner: principal.userId,
+        p_ttl_hours: 48,
+      });
+      if (error) return failDb(res, error);
+      const out: any = data;
+      return res.json({ token: out.token, expiresAt: out.expires_at });
+    } catch (e: any) {
+      return failFrom(res, e, 'invite');
     }
   });
 
   app.post('/api/household/join', mutationLimiter, async (req: Request, res: Response) => {
     try {
       const principal = await resolvePrincipal(req);
-      if (await householdForUser(principal.userId)) {
-        return fail(res, 409, 'This account is already linked to a household.');
-      }
-      const code = String(req.body?.code || '').trim();
-      if (!code) return fail(res, 400, 'A household code is required.');
-
-      const db = admin();
-      const { data: hh } = await db
-        .from('households')
-        .select('id, code')
-        .eq('code', code)
-        .maybeSingle();
-      if (!hh?.id) return fail(res, 404, `No household found for code ${code}.`);
-
-      const { error } = await db
-        .from('household_members')
-        .insert({ household_id: hh.id, user_id: principal.userId, member_role: 'member' });
-      if (error && !/duplicate key/i.test(error.message)) return fail(res, 500, error.message);
-
-      return res.json({ code: hh.code });
+      const token = String(req.body?.token || '').trim();
+      if (!token) return fail(res, 400, 'An invite code is required.');
+      const { data, error } = await admin().rpc('request_household_join', {
+        p_token: token,
+        p_user: principal.userId,
+      });
+      if (error) return failDb(res, error);
+      return res.json({ status: (data as any).status, requestId: (data as any).request_id });
     } catch (e: any) {
-      return fail(res, e.status ?? 500, e.message ?? 'join error');
+      return failFrom(res, e, 'join');
     }
   });
-}
 
-// Unambiguous 6-char code (no I/O/0/1/L) -> HH-U-XXXXXX
-function genHouseholdCode(): string {
-  const A = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-  let s = '';
-  for (let i = 0; i < 6; i++) s += A[Math.floor(Math.random() * A.length)];
-  return `HH-U-${s}`;
+  app.get('/api/household/requests', readLimiter, async (req: Request, res: Response) => {
+    try {
+      const principal = await resolvePrincipal(req);
+      const hh = await householdForUser(principal.userId);
+      if (!hh) return res.json({ requests: [] });
+      const { data, error } = await admin()
+        .from('household_join_requests')
+        .select('id, created_at, user:users(display_name)')
+        .eq('household_id', hh.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true });
+      if (error) return failDb(res, error);
+      // Only the owner sees who is asking.
+      const { data: me } = await admin()
+        .from('household_members')
+        .select('member_role')
+        .eq('household_id', hh.id)
+        .eq('user_id', principal.userId)
+        .maybeSingle();
+      if (me?.member_role !== 'owner') return res.json({ requests: [] });
+      return res.json({
+        requests: (data ?? []).map((r: any) => ({
+          id: r.id,
+          createdAt: r.created_at,
+          name: r.user?.display_name ?? 'Resident',
+        })),
+      });
+    } catch (e: any) {
+      return failFrom(res, e, 'requests');
+    }
+  });
+
+  app.post('/api/household/requests/:id/decide', mutationLimiter, async (req: Request, res: Response) => {
+    try {
+      const principal = await resolvePrincipal(req);
+      const { data, error } = await admin().rpc('decide_household_join', {
+        p_request: req.params.id,
+        p_owner: principal.userId,
+        p_approve: req.body?.approve === true,
+      });
+      if (error) return failDb(res, error);
+      return res.json({ status: (data as any).status });
+    } catch (e: any) {
+      return failFrom(res, e, 'decide join');
+    }
+  });
 }

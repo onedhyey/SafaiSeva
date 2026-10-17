@@ -3,7 +3,6 @@
 // strings; the adjudicator maps them to a human reason.
 
 import { admin } from './supabaseAdmin.ts';
-import { hammingHex } from './phash.ts';
 import { haversineKm, haversineMeters } from './geo.ts';
 
 const IST_OFFSET_MIN = 330; // UTC+05:30, no DST
@@ -31,6 +30,9 @@ export interface FraudContext {
   lat: number | null;
   lng: number | null;
   phash: string | null;
+  contentHash?: string | null;
+  /** The handover being verified — its own earlier attempt is not a duplicate of itself. */
+  handoverId?: string;
 }
 
 export async function runFraudChecks(ctx: FraudContext): Promise<string[]> {
@@ -81,22 +83,20 @@ export async function runFraudChecks(ctx: FraudContext): Promise<string[]> {
     }
   }
 
-  // 4. Cross-user near-duplicate image (audit A3).
-  if (ctx.phash) {
-    const since = new Date(Date.now() - 30 * 864e5).toISOString();
-    const { data: recent } = await db
-      .from('handover_media')
-      .select('phash, created_at')
-      .not('phash', 'is', null)
-      .gte('created_at', since)
-      .order('created_at', { ascending: false })
-      .limit(800);
-    for (const row of recent ?? []) {
-      if (row.phash && hammingHex(ctx.phash, row.phash) <= 6) {
-        signals.add('duplicate_phash');
-        break;
-      }
-    }
+  // 4. Duplicate evidence (audit A3 / F12), over every retained hash in SQL:
+  //    exact bytes seen before, or a near-identical photo from ANOTHER household → block
+  //    (duplicate_phash); the household's own bins looking alike day to day → similar_own
+  //    (informational only — it used to be treated as a duplicate and blocked).
+  if (ctx.phash || ctx.contentHash) {
+    const { data, error } = await db.rpc('media_duplicate_signals', {
+      p_household: ctx.householdId,
+      p_phash: ctx.phash,
+      p_content_hash: ctx.contentHash ?? null,
+      p_max_distance: 6,
+      p_exclude_handover: ctx.handoverId ?? null,
+    });
+    if (error) console.error('[fraud] duplicate check failed:', error.message);
+    for (const sig of (data as string[] | null) ?? []) signals.add(sig);
   }
 
   // 5. Velocity / burst over the last 2 hours for this household.
@@ -123,18 +123,4 @@ export async function runFraudChecks(ctx: FraudContext): Promise<string[]> {
   }
 
   return [...signals];
-}
-
-export async function workerCapExceeded(workerId: string, issuedDate: string): Promise<boolean> {
-  const db = admin();
-  const [{ data: worker }, { count }] = await Promise.all([
-    db.from('workers').select('daily_issue_cap').eq('id', workerId).maybeSingle(),
-    db
-      .from('worker_issuances')
-      .select('id', { count: 'exact', head: true })
-      .eq('worker_id', workerId)
-      .eq('issued_date', issuedDate),
-  ]);
-  const cap = worker?.daily_issue_cap ?? 25;
-  return (count ?? 0) >= cap;
 }

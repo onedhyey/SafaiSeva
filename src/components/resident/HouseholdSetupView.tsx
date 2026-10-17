@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Home, Users, Copy, Check, ArrowRight, AlertTriangle } from 'lucide-react';
-import { createHousehold, joinHousehold } from '../../lib/api';
+import { createHousehold, requestToJoinHousehold, createHouseholdInvite } from '../../lib/api';
 
 interface HouseholdSetupViewProps {
   /** Called once the account is attached to a household (created or joined). */
@@ -29,6 +29,8 @@ export const HouseholdSetupView: React.FC<HouseholdSetupViewProps> = ({ onLinked
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<{ code: string; nearby: string | null } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [invite, setInvite] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
 
   const handleCreate = async () => {
     setBusy(true);
@@ -48,28 +50,42 @@ export const HouseholdSetupView: React.FC<HouseholdSetupViewProps> = ({ onLinked
     }
   };
 
+  // Joining needs an invite code from the household owner, who then approves the request.
   const handleJoin = async () => {
-    const code = joinCode.trim().toUpperCase();
-    if (!code) {
-      setError('Enter the household code.');
+    const token = joinCode.trim().toUpperCase();
+    if (!token) {
+      setError('Enter the invite code.');
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      await joinHousehold(code);
-      await onLinked();
+      await requestToJoinHousehold(token);
+      setPending(true);
     } catch (e: any) {
-      setError(e?.message || 'Could not join that household.');
+      setError(e?.message || 'Could not send the join request.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleInvite = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await createHouseholdInvite();
+      setInvite(res.token);
+    } catch (e: any) {
+      setError(e?.message || 'Could not create an invite.');
     } finally {
       setBusy(false);
     }
   };
 
   const copyCode = async () => {
-    if (!created) return;
+    if (!invite) return;
     try {
-      await navigator.clipboard.writeText(created.code);
+      await navigator.clipboard.writeText(invite);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -88,23 +104,38 @@ export const HouseholdSetupView: React.FC<HouseholdSetupViewProps> = ({ onLinked
 
         <div className="bg-ink-soft border border-muted/30 rounded-lg p-5 text-center space-y-3">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-l">
-            Household join code
+            Household code
           </div>
           <div className="font-mono text-2xl font-bold text-white tracking-[0.15em] tabular-nums">
             {created.code}
           </div>
-          <button
-            type="button"
-            onClick={copyCode}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-green bg-green/10 border border-green/30 px-3 py-1.5 rounded-md hover:bg-green/20 transition-colors cursor-pointer"
-          >
-            {copied ? <Check size={13} /> : <Copy size={13} />}
-            <span>{copied ? 'Copied' : 'Copy code'}</span>
-          </button>
           <p className="text-[11px] text-muted-l leading-relaxed max-w-[280px] mx-auto">
-            Anyone who joins with this code documents the same bins. Credits and daily limits
-            are shared across the household — extra accounts don't earn extra leaves.
+            This identifies your home to karmacharis. To add family, send them an invite code —
+            you approve each person. Credits and daily limits are shared across the household.
           </p>
+          {invite ? (
+            <div className="space-y-2">
+              <div className="font-mono text-lg font-bold text-white tracking-widest">{invite}</div>
+              <button
+                type="button"
+                onClick={copyCode}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-green bg-green/10 border border-green/30 px-3 py-1.5 rounded-md hover:bg-green/20 transition-colors cursor-pointer min-h-[36px]"
+              >
+                {copied ? <Check size={13} /> : <Copy size={13} />}
+                <span>{copied ? 'Copied' : 'Copy invite code'}</span>
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleInvite}
+              disabled={busy}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-green bg-green/10 border border-green/30 px-3 py-1.5 rounded-md hover:bg-green/20 transition-colors cursor-pointer min-h-[36px] disabled:opacity-50"
+            >
+              <Users size={13} />
+              <span>Invite a family member</span>
+            </button>
+          )}
         </div>
 
         {created.nearby && (
@@ -112,7 +143,7 @@ export const HouseholdSetupView: React.FC<HouseholdSetupViewProps> = ({ onLinked
             <AlertTriangle size={14} className="text-amber shrink-0 mt-0.5" />
             <span>
               A household is already registered near this location ({created.nearby}). If that's
-              your home, ask them for their code and use <strong>Join</strong> instead next time.
+              your home, ask them for an invite code and use <strong>Join</strong> instead next time.
             </span>
           </div>
         )}
@@ -129,6 +160,28 @@ export const HouseholdSetupView: React.FC<HouseholdSetupViewProps> = ({ onLinked
     );
   }
 
+  // ---- Join requested: waiting for the owner ----
+  if (pending) {
+    return (
+      <div className="space-y-4 pb-20 pt-1 text-left select-none">
+        <div className="px-1">
+          <h1 className="text-sm font-semibold text-white">Request sent</h1>
+          <p className="text-xs text-muted-l">
+            The household owner needs to approve you. Ask them to open Settings → Household members.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onLinked()}
+          className="w-full bg-green hover:bg-[#16934f] text-white font-bold text-xs py-3.5 rounded-md flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[46px]"
+        >
+          <span>I've been approved — continue</span>
+          <ArrowRight size={14} />
+        </button>
+      </div>
+    );
+  }
+
   // ---- Create / Join chooser ----
   return (
     <div className="space-y-4 pb-20 pt-1 text-left select-none">
@@ -136,7 +189,7 @@ export const HouseholdSetupView: React.FC<HouseholdSetupViewProps> = ({ onLinked
         <h1 className="text-sm font-semibold text-white">Set up your household</h1>
         <p className="text-xs text-muted-l">
           A household is one home's shared segregation record. Create one if you're the first
-          from your home; otherwise join with the code a family member shared.
+          from your home; otherwise join with an invite code from the household owner.
         </p>
       </div>
 
@@ -170,7 +223,7 @@ export const HouseholdSetupView: React.FC<HouseholdSetupViewProps> = ({ onLinked
           }`}
         >
           <Users size={14} className={mode === 'join' ? 'text-green' : ''} />
-          <span>Join with code</span>
+          <span>Join with invite</span>
         </button>
       </div>
 
@@ -184,7 +237,7 @@ export const HouseholdSetupView: React.FC<HouseholdSetupViewProps> = ({ onLinked
       {mode === 'create' ? (
         <div className="bg-ink-soft border border-muted/30 rounded-lg p-4 space-y-3">
           <p className="text-[11px] text-muted-l leading-relaxed">
-            You'll get a code to share with your family so everyone documents the same bins.
+            You'll be the owner and can invite your family so everyone documents the same bins.
             Credits and daily limits are per household.
           </p>
           <div className="space-y-1.5">
@@ -211,17 +264,17 @@ export const HouseholdSetupView: React.FC<HouseholdSetupViewProps> = ({ onLinked
       ) : (
         <div className="bg-ink-soft border border-muted/30 rounded-lg p-4 space-y-3">
           <p className="text-[11px] text-muted-l leading-relaxed">
-            Enter the code a family member (or an AMC officer) gave you.
+            Enter the invite code the household owner shared. They'll approve your request.
           </p>
           <div className="space-y-1.5">
             <label className="block text-[11px] font-mono uppercase tracking-wider text-muted-l">
-              Household code
+              Invite code
             </label>
             <input
               type="text"
               value={joinCode}
               onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-              placeholder="HH-U-XXXXXX"
+              placeholder="XXXX-XXXX-XXXX"
               autoCapitalize="characters"
               className="w-full bg-ink border border-muted/40 rounded-md px-3 py-2 text-xs font-mono tracking-widest text-tint placeholder:text-muted-l focus:outline-none focus:border-green"
             />
@@ -232,7 +285,7 @@ export const HouseholdSetupView: React.FC<HouseholdSetupViewProps> = ({ onLinked
             disabled={busy}
             className="w-full bg-green hover:bg-[#16934f] text-white font-bold text-xs py-3 rounded-md transition-colors cursor-pointer min-h-[44px] disabled:opacity-50"
           >
-            {busy ? 'Joining…' : 'Join household'}
+            {busy ? 'Sending…' : 'Ask to join'}
           </button>
         </div>
       )}

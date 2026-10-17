@@ -12,6 +12,24 @@ import type { Request } from 'express';
 import { verifyToken, createClerkClient, type ClerkClient } from '@clerk/backend';
 import { admin } from './supabaseAdmin.ts';
 import { env } from './env.ts';
+import { identityMode, type IdentityMode } from './identity.ts';
+
+export function currentIdentityMode(): IdentityMode {
+  return identityMode({
+    authEnabled: env.authEnabled,
+    nodeEnv: env.nodeEnv,
+    allowDemo: env.allowDemoIdentity,
+  });
+}
+
+function identityDisabled(): Error {
+  const e: any = new Error(
+    'Sign-in is not configured on this server. Set VITE_AUTH_ENABLED=true (Clerk), or ' +
+      'ALLOW_DEMO_IDENTITY=true for a demo deployment with no real rewards.'
+  );
+  e.status = 503;
+  return e;
+}
 
 export interface Principal {
   userId: string;
@@ -196,7 +214,9 @@ async function resolveClerk(token: string, req: Request): Promise<{ userId: stri
 }
 
 export async function resolvePrincipal(req: Request): Promise<Principal> {
-  if (env.authEnabled) {
+  const mode = currentIdentityMode();
+  if (mode === 'disabled') throw identityDisabled();
+  if (mode === 'clerk') {
     const auth = req.header('authorization') || '';
     const token = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : '';
     if (!token) {
@@ -242,8 +262,11 @@ export async function resolveWorker(req: Request): Promise<WorkerPrincipal> {
     return e;
   };
 
+  const mode = currentIdentityMode();
+  if (mode === 'disabled') throw identityDisabled();
+
   let query;
-  if (env.authEnabled) {
+  if (mode === 'clerk') {
     const principal = await resolvePrincipal(req);
     query = db.from('workers').select('*').eq('user_id', principal.userId);
   } else {
@@ -293,8 +316,11 @@ export async function resolveOfficer(req: Request): Promise<OfficerPrincipal> {
     return e;
   };
 
+  const mode = currentIdentityMode();
+  if (mode === 'disabled') throw identityDisabled();
+
   let query;
-  if (env.authEnabled) {
+  if (mode === 'clerk') {
     const principal = await resolvePrincipal(req);
     query = db.from('ward_officers').select('*').eq('user_id', principal.userId);
   } else {
