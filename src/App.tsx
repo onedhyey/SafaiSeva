@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import {
   Role,
   HouseholdProfile,
@@ -54,8 +54,13 @@ import { HouseholdSetupView } from './components/resident/HouseholdSetupView';
 import { DocumentView } from './components/resident/DocumentView';
 import { RewardsView } from './components/resident/RewardsView';
 import { ImpactView } from './components/resident/ImpactView';
-import { KarmachariView } from './components/karmachari/KarmachariView';
-import { WardOfficerView } from './components/officer/WardOfficerView';
+// Role screens residents never open are split out of the initial bundle.
+const KarmachariView = lazy(() =>
+  import('./components/karmachari/KarmachariView').then((m) => ({ default: m.KarmachariView }))
+);
+const WardOfficerView = lazy(() =>
+  import('./components/officer/WardOfficerView').then((m) => ({ default: m.WardOfficerView }))
+);
 import { OutboxView } from './components/resident/OutboxView';
 
 export default function App() {
@@ -514,15 +519,19 @@ export default function App() {
 
               {/* KARMACHARI VIEW */}
               {activeRole === 'karmachari' && (
-                <KarmachariView karmachari={karmachari} onRefreshData={loadData} />
+                <Suspense fallback={null}>
+                  <KarmachariView karmachari={karmachari} onRefreshData={loadData} />
+                </Suspense>
               )}
 
               {/* WARD OFFICER VIEW */}
               {activeRole === 'officer' && (
-                <WardOfficerView
-                  wardStats={wardStats}
-                  handovers={handovers}
-                />
+                <Suspense fallback={null}>
+                  <WardOfficerView
+                    wardStats={wardStats}
+                    handovers={handovers}
+                  />
+                </Suspense>
               )}
             </>
           )}

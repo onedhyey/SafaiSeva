@@ -27,7 +27,7 @@ import {
   Edit3,
 } from 'lucide-react';
 import { LeafGlyph } from '../LeafGlyph';
-import { LocationPickerModal } from '../LocationPickerModal';
+import { LazyLocationPicker as LocationPickerModal } from '../LazyLocationPicker';
 import { fitWithin, PHOTO_MAX_PX, KEYFRAME_MAX_PX } from '../../lib/imageSize';
 import { analyse, analyseVideo, OfflineSubmitError, checklistToArray } from '../../lib/verification';
 import { dataUrlToBlob } from '../../lib/api';

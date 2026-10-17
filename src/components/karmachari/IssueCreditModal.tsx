@@ -3,7 +3,7 @@ import { X, Check, ShieldCheck, MapPin, Edit3 } from 'lucide-react';
 import { LeafGlyph } from '../LeafGlyph';
 import { LocationData } from '../../types';
 import { workerIssue } from '../../lib/api';
-import { LocationPickerModal } from '../LocationPickerModal';
+import { LazyLocationPicker as LocationPickerModal } from '../LazyLocationPicker';
 
 interface IssueCreditModalProps {
   isOpen: boolean;
