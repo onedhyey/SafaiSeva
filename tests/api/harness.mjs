@@ -11,8 +11,12 @@
 // suite reports SKIP and exits 0 (the SQL suites still cover the decision logic).
 
 import { spawn, execFileSync } from 'node:child_process';
-import { createHmac } from 'node:crypto';
+import { createHmac, createECDH, randomBytes } from 'node:crypto';
 import http from 'node:http';
+import https from 'node:https';
+import { mkdtempSync, readFileSync as readFile } from 'node:fs';
+import { tmpdir } from 'node:os';
+import webpush from 'web-push';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -225,6 +229,30 @@ export async function startStack({ env = {} } = {}) {
     children.push({ kill: () => proxy.close() });
     const proxyUrl = `http://127.0.0.1:${proxyPort}`;
 
+    // Push service sink (web-push only speaks HTTPS): self-signed, test-only.
+    const pushes = []; // { id, status } received
+    const pushStatus = new Map(); // subscription id -> status code to answer with
+    const certDir = mkdtempSync(path.join(tmpdir(), 'ss-push-'));
+    execFileSync('openssl', [
+      'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-subj', '/CN=127.0.0.1',
+      '-keyout', path.join(certDir, 'key.pem'), '-out', path.join(certDir, 'cert.pem'),
+    ], { stdio: 'ignore' });
+    const pushPort = await freePort();
+    const pushSink = https.createServer(
+      { key: readFile(path.join(certDir, 'key.pem')), cert: readFile(path.join(certDir, 'cert.pem')) },
+      async (req, res) => {
+        await readBody(req);
+        const id = req.url.split('/').pop();
+        const status = pushStatus.get(id) ?? 201;
+        pushes.push({ id, status });
+        res.writeHead(status);
+        res.end();
+      }
+    );
+    await new Promise((r) => pushSink.listen(pushPort, '127.0.0.1', r));
+    children.push({ kill: () => pushSink.close() });
+    const vapid = webpush.generateVAPIDKeys();
+
     // API server
     const apiPort = await freePort();
     const api = spawn(path.join(root, 'node_modules', '.bin', 'tsx'), ['server.ts'], {
@@ -243,6 +271,11 @@ export async function startStack({ env = {} } = {}) {
         GEMINI_MODEL: 'fake-model',
         QR_SIGNING_SECRET: 'test-qr-secret',
         VITE_AUTH_ENABLED: 'false',
+        VAPID_PUBLIC_KEY: vapid.publicKey,
+        VAPID_PRIVATE_KEY: vapid.privateKey,
+        VAPID_SUBJECT: 'mailto:test@example.invalid',
+        // Test-only: trust the self-signed push sink above.
+        NODE_TLS_REJECT_UNAUTHORIZED: '0',
         ...env,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -304,10 +337,26 @@ export async function startStack({ env = {} } = {}) {
       });
     }
 
+    /** A browser-like push subscription pointing at the local sink. */
+    function fakeSubscription(id) {
+      const ecdh = createECDH('prime256v1');
+      ecdh.generateKeys();
+      return {
+        endpoint: `https://127.0.0.1:${pushPort}/push/${id}`,
+        keys: {
+          p256dh: ecdh.getPublicKey().toString('base64url'),
+          auth: randomBytes(16).toString('base64url'),
+        },
+      };
+    }
+
     return {
       db,
       base,
       objects,
+      pushes,
+      pushStatus,
+      fakeSubscription,
       call,
       submitPhoto,
       setVision: (v) => (vision = v),

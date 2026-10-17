@@ -237,6 +237,52 @@ try {
     }
   });
 
+  await test('push: config exposes the VAPID public key; subscribe stores the subscription', async () => {
+    const cfg = await s.call('GET', '/api/push/config', { device: dev });
+    eq(cfg.status, 200, `config (${cfg.text})`);
+    assert(typeof cfg.body.publicKey === 'string' && cfg.body.publicKey.length > 40, 'public key');
+    const sub = s.fakeSubscription('demo-sub');
+    const r = await s.call('POST', '/api/push/subscribe', { device: dev, body: sub });
+    eq(r.status, 200, `subscribe (${r.text})`);
+    const n = await one(`select count(*)::int n from public.push_subscriptions where endpoint = $1`, [sub.endpoint]);
+    eq(n.n, 1, 'stored once');
+    await s.call('POST', '/api/push/subscribe', { device: dev, body: sub });
+    const n2 = await one(`select count(*)::int n from public.push_subscriptions where endpoint = $1`, [sub.endpoint]);
+    eq(n2.n, 1, 'idempotent');
+  });
+
+  await test('push: a karmachari review decision notifies the household', async () => {
+    const w = (await one(`select id from public.wards where code = 'W12-NAVRANGPURA'`)).id;
+    const d = 'push-dev-' + Math.random().toString(36).slice(2, 8);
+    const u = (await one(`insert into public.users (device_id) values ($1) returning id`, [d])).id;
+    const hh = (await one(
+      `insert into public.households (code, address, ward_id) values ('HH-PUSH-1', 'p', $1) returning id`, [w]
+    )).id;
+    await s.db.query(`insert into public.household_members (household_id, user_id, member_role) values ($1, $2, 'owner')`, [hh, u]);
+    const h = (await one(
+      `insert into public.handovers (household_id, submitted_by, status, declared_streams) values ($1, $2, 'in_review', '{wet,dry}') returning id`,
+      [hh, u]
+    )).id;
+    const sub = s.fakeSubscription('review-sub');
+    eq((await s.call('POST', '/api/push/subscribe', { device: d, body: sub })).status, 200, 'subscribe');
+    const r = await s.call('POST', `/api/review-queue/${h}/decide`, { worker: WORKER, body: { decision: 'approve' } });
+    eq(r.status, 200, `approve (${r.text})`);
+    const until = Date.now() + 5000;
+    while (!s.pushes.some((p) => p.id === 'review-sub') && Date.now() < until) await new Promise((x) => setTimeout(x, 100));
+    assert(s.pushes.some((p) => p.id === 'review-sub'), 'push delivered to the household');
+  });
+
+  await test('push: a gone subscription (410) is removed', async () => {
+    const d = 'gone-dev-' + Math.random().toString(36).slice(2, 8);
+    const sub = s.fakeSubscription('gone-sub');
+    s.pushStatus.set('gone-sub', 410);
+    eq((await s.call('POST', '/api/push/subscribe', { device: d, body: sub })).status, 200, 'subscribe');
+    const t = await s.call('POST', '/api/push/test', { device: d });
+    eq(t.status, 200, `test push (${t.text})`);
+    const n = await one(`select count(*)::int n from public.push_subscriptions where endpoint = $1`, [sub.endpoint]);
+    eq(n.n, 0, 'removed after 410');
+  });
+
   await test('ledger reconciliation is empty after the whole run', async () => {
     const rows = (await s.db.query(`select * from public.v_ledger_reconciliation`)).rows;
     eq(rows, [], 'reconciliation');
