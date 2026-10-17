@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { LeafGlyph } from '../LeafGlyph';
 import { LocationPickerModal } from '../LocationPickerModal';
+import { fitWithin, PHOTO_MAX_PX, KEYFRAME_MAX_PX } from '../../lib/imageSize';
 import { analyse, analyseVideo, OfflineSubmitError, checklistToArray } from '../../lib/verification';
 import { dataUrlToBlob } from '../../lib/api';
 import { enqueueCapture } from '../../lib/offlineQueue';
@@ -267,14 +268,13 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
     if (!videoRef.current) return;
     const video = videoRef.current;
     const canvas = document.createElement('canvas');
-    const vw = video.videoWidth || 640;
-    const vh = video.videoHeight || 480;
+    const { width: vw, height: vh } = fitWithin(video.videoWidth, video.videoHeight, PHOTO_MAX_PX);
     canvas.width = vw;
     canvas.height = vh;
     const ctx = canvas.getContext('2d');
     if (ctx) {
       ctx.drawImage(video, 0, 0, vw, vh);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
       setPhotoUrl(dataUrl);
       stopCamera();
       setStep('streams');
@@ -304,8 +304,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
     if (!videoRef.current) return null;
     const video = videoRef.current;
     const canvas = document.createElement('canvas');
-    const vw = Math.min(video.videoWidth || 640, 640);
-    const vh = Math.min(video.videoHeight || 480, 480);
+    const { width: vw, height: vh } = fitWithin(video.videoWidth, video.videoHeight, KEYFRAME_MAX_PX);
     canvas.width = vw;
     canvas.height = vh;
     const ctx = canvas.getContext('2d');
