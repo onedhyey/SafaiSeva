@@ -111,5 +111,22 @@ check(
   JSON.stringify(unknown)
 );
 
+// --- QR signing secret is mandatory outside development ------------------------------
+{
+  const saved = { NODE_ENV: process.env.NODE_ENV, QR: process.env.QR_SIGNING_SECRET };
+  process.env.NODE_ENV = 'production';
+  delete process.env.QR_SIGNING_SECRET;
+  const { signTicket } = await import('../server/qrToken.ts?prod-no-secret');
+  let threw = null;
+  try {
+    signTicket({ tid: 't', hh: 'h', type: 'janmarg_brts', exp: 1 });
+  } catch (e) {
+    threw = e;
+  }
+  check('production without QR_SIGNING_SECRET refuses to sign tickets (503)', threw?.status === 503, String(threw));
+  process.env.NODE_ENV = saved.NODE_ENV;
+  if (saved.QR !== undefined) process.env.QR_SIGNING_SECRET = saved.QR;
+}
+
 console.log(failed ? `\n${failed} FAILED` : '\nALL PASS');
 if (failed) process.exitCode = 1;

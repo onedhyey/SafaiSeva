@@ -4,9 +4,19 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { env, supabaseConfigured, geminiConfigured } from "./server/env.ts";
 import { mountApiRoutes } from "./server/routes.ts";
+import { currentIdentityMode } from "./server/principal.ts";
+import { securityHeaders, requestLog } from "./server/http.ts";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
+
+app.disable("x-powered-by");
+// Behind a load balancer / platform proxy set TRUST_PROXY to its hop count (usually 1) so
+// req.ip and req.secure reflect the client. Off by default: trusting a header nobody
+// strips lets any caller spoof its IP.
+if (process.env.TRUST_PROXY) app.set("trust proxy", Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY);
+app.use(securityHeaders);
+app.use("/api", requestLog);
 
 // Evidence photos/videos are uploaded straight to Storage via a signed URL (audit B2);
 // the JSON body now only carries object keys + small derived video keyframes, so a tight
@@ -24,6 +34,7 @@ app.get("/api/health", (_req, res) => {
     geminiConfigured: geminiConfigured(),
     supabaseConfigured: supabaseConfigured(),
     authEnabled: env.authEnabled,
+    identityMode: currentIdentityMode(),
   });
 });
 
@@ -55,7 +66,7 @@ async function startServer() {
     console.log(
       `  gemini: ${geminiConfigured() ? env.geminiModel : "NOT CONFIGURED"} · ` +
         `supabase: ${supabaseConfigured() ? "ok" : "NOT CONFIGURED"} · ` +
-        `auth: ${env.authEnabled ? "enabled" : "open demo"}`
+        `identity: ${currentIdentityMode()}`
     );
   });
 }

@@ -225,6 +225,18 @@ try {
     eq([row.display_name, row.deleted], ['Deleted user', true], 'anonymised');
   });
 
+  await test('security headers on API and page responses', async () => {
+    for (const p of ['/api/health', '/']) {
+      const r = await fetch(s.base + p);
+      const h = (k) => r.headers.get(k) || '';
+      assert(h('x-content-type-options') === 'nosniff', `${p} nosniff`);
+      assert(h('x-frame-options') === 'DENY', `${p} frame`);
+      assert(/strict-origin/.test(h('referrer-policy')), `${p} referrer`);
+      assert(/camera=\(self\)/.test(h('permissions-policy')), `${p} permissions`);
+      assert(!h('x-powered-by'), `${p} x-powered-by hidden`);
+    }
+  });
+
   await test('ledger reconciliation is empty after the whole run', async () => {
     const rows = (await s.db.query(`select * from public.v_ledger_reconciliation`)).rows;
     eq(rows, [], 'reconciliation');

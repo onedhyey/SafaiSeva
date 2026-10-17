@@ -14,7 +14,7 @@ import {
   fetchEvidence,
   isOwnedEvidenceKey,
 } from './storage.ts';
-import { signTicket } from './qrToken.ts';
+import { signTicket, assertTicketSigningReady } from './qrToken.ts';
 import { resolveCaptureTime } from './captureTime.ts';
 import { rpcError } from './rpcErrors.ts';
 import { currentIdentityMode } from './principal.ts';
@@ -611,6 +611,9 @@ export function mountApiRoutes(app: Express) {
       const cost = rules.redeem?.[transitType];
       if (!cost || cost <= 0) return fail(res, 400, 'This ticket is not available right now.');
 
+      // Never spend credits on a ticket we then cannot sign.
+      assertTicketSigningReady();
+
       const expiresAt = new Date(Date.now() + 24 * 3600_000).toISOString();
       const db = admin();
 
@@ -628,7 +631,7 @@ export function mountApiRoutes(app: Express) {
         if (/insufficient balance/i.test(error.message)) {
           return fail(res, 402, `Not enough leaves — this ticket costs ${cost}.`);
         }
-        return fail(res, 500, `redeem failed: ${error.message}`);
+        return failDb(res, error);
       }
 
       const t: any = ticket;
