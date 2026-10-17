@@ -17,6 +17,14 @@ import {
 import { signTicket } from './qrToken.ts';
 import { resolveCaptureTime } from './captureTime.ts';
 import { rpcError } from './rpcErrors.ts';
+import { currentIdentityMode } from './principal.ts';
+import {
+  CONSENT_VERSION,
+  consentFor,
+  hasCurrentConsent,
+  consentRequiredError,
+  forgetUser,
+} from './privacy.ts';
 import {
   verifyLimiter,
   signLimiter,
@@ -226,6 +234,7 @@ export function mountApiRoutes(app: Express) {
   app.post('/api/uploads/sign', signLimiter, async (req: Request, res: Response) => {
     try {
       const principal = await resolvePrincipal(req);
+      if (!(await hasCurrentConsent(principal.userId))) throw consentRequiredError();
       const kind = String(req.body?.kind ?? '');
       const contentType = String(req.body?.contentType ?? '');
       if (!['photo', 'video', 'keyframe'].includes(kind)) {
@@ -250,6 +259,8 @@ export function mountApiRoutes(app: Express) {
   app.post('/api/handovers/verify', verifyLimiter, async (req: Request, res: Response) => {
     try {
       const principal = await resolvePrincipal(req);
+      // No evidence of anyone's home is processed before they agreed to the notice (F8).
+      if (!(await hasCurrentConsent(principal.userId))) throw consentRequiredError();
       const db = admin();
       const hh = await householdForUser(principal.userId);
       if (!hh) return fail(res, 409, 'No household is linked to this session.');
@@ -1092,4 +1103,59 @@ export function mountApiRoutes(app: Express) {
       return failFrom(res, e, 'decide join');
     }
   });
+
+  // ---------------------------------------------------------------------------------
+  // The signed-in person: consent state, and the right to erasure (audit F8).
+  //   GET    /api/me                         -> { consentVersion, consentRequired, ... }
+  //   POST   /api/me/consent  { version }    -> { consentVersion }
+  //   DELETE /api/me                         -> { deleted: true, removedObjects }
+  // ---------------------------------------------------------------------------------
+  app.get('/api/me', readLimiter, async (req: Request, res: Response) => {
+    try {
+      const principal = await resolvePrincipal(req);
+      const consent = await consentFor(principal.userId);
+      const hh = await householdForUser(principal.userId);
+      return res.json({
+        identityMode: currentIdentityMode(),
+        consentVersion: CONSENT_VERSION,
+        consentAcceptedVersion: consent.version,
+        consentRequired: consent.version !== CONSENT_VERSION,
+        householdCode: hh?.code ?? null,
+      });
+    } catch (e: any) {
+      return failFrom(res, e, 'me');
+    }
+  });
+
+  app.post('/api/me/consent', mutationLimiter, async (req: Request, res: Response) => {
+    try {
+      const principal = await resolvePrincipal(req);
+      if (req.body?.version !== CONSENT_VERSION) {
+        return fail(res, 409, 'The privacy notice has changed — please review the current version.');
+      }
+      const { error } = await admin().rpc('record_consent', {
+        p_user: principal.userId,
+        p_version: CONSENT_VERSION,
+      });
+      if (error) return failDb(res, error);
+      return res.json({ consentVersion: CONSENT_VERSION });
+    } catch (e: any) {
+      return failFrom(res, e, 'consent');
+    }
+  });
+
+  app.delete('/api/me', mutationLimiter, async (req: Request, res: Response) => {
+    try {
+      const principal = await resolvePrincipal(req);
+      const { removedObjects } = await forgetUser(principal.userId);
+      console.log(JSON.stringify({ event: 'user_forgotten', userId: principal.userId, removedObjects }));
+      return res.json({ deleted: true, removedObjects });
+    } catch (e: any) {
+      return failFrom(res, e, 'delete me');
+    }
+  });
+
+  // Unknown API paths are JSON 404s, never the SPA's index.html.
+  app.all('/api/*', (_req: Request, res: Response) => fail(res, 404, 'Not found.'));
+
 }

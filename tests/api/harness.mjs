@@ -185,6 +185,12 @@ export async function startStack({ env = {} } = {}) {
           res.writeHead(200, { 'content-type': 'application/json' });
           return res.end(JSON.stringify({ Key: `evidence/${sign[1]}` }));
         }
+        if (url.pathname === '/storage/v1/object/evidence' && req.method === 'DELETE') {
+          const { prefixes = [] } = JSON.parse(body.toString() || '{}');
+          const removed = prefixes.filter((k) => objects.delete(k)).map((name) => ({ name }));
+          res.writeHead(200, { 'content-type': 'application/json' });
+          return res.end(JSON.stringify(removed));
+        }
         const obj = url.pathname.match(/^\/storage\/v1\/object\/evidence\/(.+)$/);
         if (obj && req.method === 'GET') {
           const o = objects.get(decodeURIComponent(obj[1]));

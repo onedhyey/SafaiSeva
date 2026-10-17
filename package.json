@@ -13,11 +13,13 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test": "tsx tests/adjudicator.test.mjs && tsx tests/offlineQueue.test.mjs && tsx tests/serverGuards.test.mjs",
-    "test:db": "tsx tests/db/migrations.test.mjs && tsx tests/db/creditIntegrity.test.mjs && tsx tests/db/households.test.mjs",
+    "test:db": "tsx tests/db/migrations.test.mjs && tsx tests/db/creditIntegrity.test.mjs && tsx tests/db/households.test.mjs && tsx tests/db/privacy.test.mjs",
     "test:api": "tsx tests/api/api.test.mjs",
     "test:all": "npm test && npm run test:db && npm run test:api",
     "test:auth": "npm run build && node scripts/auth-smoke.mjs",
-    "link-worker": "node scripts/link-worker.mjs"
+    "link-worker": "node scripts/link-worker.mjs",
+    "ops:purge-evidence": "tsx scripts/purge-evidence.ts",
+    "ops:check-ledger": "tsx scripts/check-ledger.ts"
   },
   "dependencies": {
     "@clerk/backend": "^3.16.13",
