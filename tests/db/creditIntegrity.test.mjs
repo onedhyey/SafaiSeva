@@ -88,7 +88,7 @@ try {
     const rows = await reconciliation();
     assert(rows.some((r) => r.handover_id === h), 'orphan earn row reported');
     // keep the rest of the suite's reconciliation checks meaningful
-    await db.query(`update public.handovers set status = 'verified' where id = $1`, [h]);
+    await db.query(`update public.handovers set status = 'verified', credits_awarded = 2 where id = $1`, [h]);
   });
 
   // --- decide_review (karmachari) --------------------------------------------------
