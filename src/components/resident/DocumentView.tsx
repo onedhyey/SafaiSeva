@@ -1244,6 +1244,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 type="button"
                 onClick={toggleFacingMode}
                 disabled={isRecording}
+                aria-label="Switch camera"
                 className="p-2.5 rounded-full bg-ink hover:bg-muted/20 border border-muted/30 text-tint transition-colors cursor-pointer disabled:opacity-40"
               >
                 <FlipHorizontal size={18} />
@@ -1254,6 +1255,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 <button
                   type="button"
                   onClick={startVideoRecording}
+                  aria-label="Start recording"
                   className="w-16 h-16 rounded-full border-4 border-red/80 flex items-center justify-center bg-red/20 active:scale-90 transition-transform cursor-pointer shadow-lg hover:border-red group"
                 >
                   <div className="w-11 h-11 rounded-full bg-red group-hover:scale-95 transition-transform flex items-center justify-center text-white">
@@ -1264,6 +1266,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 <button
                   type="button"
                   onClick={stopVideoRecording}
+                  aria-label="Stop recording"
                   className="w-16 h-16 rounded-full border-4 border-red flex items-center justify-center bg-red/30 active:scale-90 transition-transform cursor-pointer shadow-lg animate-pulse"
                 >
                   <div className="w-6 h-6 rounded-xs bg-red" />
