@@ -63,6 +63,12 @@ leaderboard off seed) were applied via the Management API on 2026-09-04 with the
 `schema_migrations` rows inserted (`('0015','ward_officers')`, `('0016','officer_analytics')`,
 `('0017','ward_leaderboard')`). The live tracker now lists `0001`–`0017` as applied.
 
+`0018_credit_decisions.sql` … `0021_push_subscriptions.sql` (production hardening, branch
+`onedhyey/phase1-credit-integrity`) are **not applied anywhere yet**. Apply them in order
+before deploying the server code that calls them — see `docs/OPERATIONS.md` (0019 adds a
+unique index that fails if a user belongs to two households). All four are covered by
+`npm run test:db`, which applies every migration to a fresh Postgres.
+
 Every file is **idempotent** (safe to replay against a partially- or fully-migrated DB):
 `create … if not exists`, `create or replace`, `drop … if exists` before each
 `create trigger` / `create policy` / `add constraint`, and `on conflict` on every seed
