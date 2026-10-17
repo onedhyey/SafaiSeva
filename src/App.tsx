@@ -31,6 +31,7 @@ import {
   BinsInfo,
 } from './lib/api';
 import { ConsentModal } from './components/ConsentModal';
+import { UpdatePrompt } from './components/UpdatePrompt';
 import { serverHandoverToRecord, serverTicketToRecord } from './lib/serverMap';
 import { useOnline } from './lib/useOnline';
 import {
@@ -535,6 +536,8 @@ export default function App() {
         onClose={() => setSelectedHandover(null)}
         onDisputed={loadData}
       />
+
+      <UpdatePrompt />
 
       {/* Privacy notice — before the first submission (audit F8) */}
       {inApp && activeRole === 'resident' && consent && (
