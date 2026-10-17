@@ -283,6 +283,44 @@ try {
     eq(n.n, 0, 'removed after 410');
   });
 
+  await test('moderation: officer sees a household in their ward and reverses an award', async () => {
+    const OFFICER = 'AMC-WO-12';
+    const r = await s.call('GET', '/api/officer/households/HH-NV-0188', { officer: OFFICER });
+    eq(r.status, 200, `household (${r.text})`);
+    const paid = r.body.handovers.find((h) => h.status === 'verified');
+    assert(paid, 'doorstep-paid handover listed');
+    const before = (await one(`select settled_balance::int b from public.v_household_balance where household_code = 'HH-NV-0188'`)).b;
+    const rev = await s.call('POST', `/api/officer/handovers/${paid.id}/reverse`, {
+      officer: OFFICER,
+      body: { reason: 'Spot check: bins were mixed' },
+    });
+    eq([rev.status, rev.body?.reversed], [200, 2], `reverse (${rev.text})`);
+    const after = (await one(`select settled_balance::int b from public.v_household_balance where household_code = 'HH-NV-0188'`)).b;
+    eq(after, before - 2, 'balance reduced');
+    const again = await s.call('POST', `/api/officer/handovers/${paid.id}/reverse`, { officer: OFFICER, body: { reason: 'x' } });
+    eq(again.status, 409, 'second reversal');
+    const other = await s.call('GET', '/api/officer/households/HH-OTHER-1', { officer: OFFICER });
+    eq(other.status, 403, 'other ward hidden');
+  });
+
+  await test('moderation: a suspended household cannot submit; lifting restores it', async () => {
+    const OFFICER = 'AMC-WO-12';
+    const sus = await s.call('POST', '/api/officer/households/HH-NV-0482/suspension', {
+      officer: OFFICER,
+      body: { suspended: true, reason: 'Investigating duplicate photos' },
+    });
+    eq(sus.status, 200, `suspend (${sus.text})`);
+    const v = await s.submitPhoto(dev, await noiseJpeg());
+    eq(v.status, 403, `verify while suspended (${v.text})`);
+    const lift = await s.call('POST', '/api/officer/households/HH-NV-0482/suspension', {
+      officer: OFFICER,
+      body: { suspended: false, reason: 'Cleared after spot check' },
+    });
+    eq(lift.status, 200, 'lift');
+    const n = (await one(`select count(*)::int n from public.moderation_actions`)).n;
+    assert(n >= 3, `audit rows: ${n}`);
+  });
+
   await test('ledger reconciliation is empty after the whole run', async () => {
     const rows = (await s.db.query(`select * from public.v_ledger_reconciliation`)).rows;
     eq(rows, [], 'reconciliation');
