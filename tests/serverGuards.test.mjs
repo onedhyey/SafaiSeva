@@ -5,6 +5,7 @@ import { resolveCaptureTime } from '../server/captureTime.ts';
 import { rpcError } from '../server/rpcErrors.ts';
 import { adjudicate } from '../src/lib/verification/adjudicator.ts';
 import { FALLBACK_RULES } from '../src/lib/verification/contract.ts';
+import { fitWithin } from '../src/lib/imageSize.ts';
 
 let failed = 0;
 const check = (name, cond, detail = '') => {
@@ -110,6 +111,14 @@ check(
   unknown.status === 500 && !/secret_internal_idx/.test(unknown.message),
   JSON.stringify(unknown)
 );
+
+// --- capture sizing (F13) ------------------------------------------------------------------
+const eqSize = (a, b) => a.width === b.width && a.height === b.height;
+check('1920x1080 photo → 1280x720', eqSize(fitWithin(1920, 1080, 1280), { width: 1280, height: 720 }), JSON.stringify(fitWithin(1920, 1080, 1280)));
+check('portrait 1080x1920 → 720x1280', eqSize(fitWithin(1080, 1920, 1280), { width: 720, height: 1280 }));
+check('small frames are not upscaled', eqSize(fitWithin(640, 480, 1280), { width: 640, height: 480 }));
+check('16:9 keyframe keeps its aspect at 640', eqSize(fitWithin(1280, 720, 640), { width: 640, height: 360 }), JSON.stringify(fitWithin(1280, 720, 640)));
+check('zero size falls back to 640x480', eqSize(fitWithin(0, 0, 1280), { width: 640, height: 480 }));
 
 // --- QR signing secret is mandatory outside development ------------------------------
 {
