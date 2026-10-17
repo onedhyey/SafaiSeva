@@ -10,9 +10,23 @@ import { env, geminiConfigured } from './env.ts';
 import type { WasteEvidence } from '../src/lib/verification/contract.ts';
 
 let ai: GoogleGenAI | null = null;
+
+const GEMINI_TIMEOUT_MS = 25_000;
 function client(): GoogleGenAI {
   if (!geminiConfigured()) throw Object.assign(new Error('GEMINI_API_KEY is not configured'), { status: 503 });
-  if (!ai) ai = new GoogleGenAI({ apiKey: env.geminiApiKey! });
+  if (!ai) {
+    ai = new GoogleGenAI({
+      apiKey: env.geminiApiKey!,
+      // Bounded latency (audit F13): the SDK default is 5 attempts with backoff up to 60 s,
+      // which can hold a resident's verify request for minutes. One quick retry, then the
+      // caller routes the handover to human review.
+      httpOptions: {
+        timeout: GEMINI_TIMEOUT_MS,
+        retryOptions: { attempts: 2, initialDelay: 1, maxDelay: 2 },
+        ...(env.geminiBaseUrl ? { baseUrl: env.geminiBaseUrl } : {}),
+      },
+    });
+  }
   return ai;
 }
 

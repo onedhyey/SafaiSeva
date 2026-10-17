@@ -104,6 +104,8 @@ export async function freshDb({ seed = false } = {}) {
 
   return {
     pool,
+    name,
+    config: withDatabase(base, name),
     query: (text, params) => pool.query(text, params),
     async drop() {
       await pool.end();

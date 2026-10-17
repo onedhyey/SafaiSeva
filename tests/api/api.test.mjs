@@ -1,0 +1,207 @@
+// End-to-end API tests: the real Express routes against real Postgres via PostgREST.
+// Proves the audit fixes at the HTTP surface the client actually uses.
+import { startStack, postgrestBin, noiseJpeg, CLEAN_EVIDENCE } from './harness.mjs';
+import { test, done, assert, eq } from '../db/harness.mjs';
+
+if (!postgrestBin()) {
+  console.log('SKIP  API suite — no PostgREST binary (set POSTGREST_BIN or put postgrest on PATH)');
+  process.exit(0);
+}
+
+const WORKER = 'AMC-WZ-109';
+
+// --- fail-closed identity (F1 / F2) ------------------------------------------------------
+{
+  const s = await startStack({ env: { NODE_ENV: 'production' } });
+  try {
+    await test('F1: production without Clerk refuses anonymous device sessions (503)', async () => {
+      const r = await s.call('GET', '/api/wallet', { device: 'attacker-device-0001' });
+      eq(r.status, 503, 'status');
+    });
+    await test('F2: production without Clerk ignores the demo karmachari header (503)', async () => {
+      const r = await s.call('POST', '/api/worker/issue', {
+        worker: WORKER,
+        body: { householdCode: 'HH-NV-0188', streams: ['wet', 'dry'] },
+      });
+      eq(r.status, 503, 'status');
+      const n = await s.db.query(`select count(*)::int n from public.credit_ledger where reason like 'Doorstep%'`);
+      eq(n.rows[0].n, 0, 'no credits issued');
+    });
+  } finally {
+    await s.stop();
+  }
+}
+
+// --- demo mode (development) end to end -------------------------------------------------
+const s = await startStack();
+try {
+  const dev = 'demo-device-' + Math.random().toString(36).slice(2, 10);
+  const one = (sql, p) => s.db.query(sql, p).then((x) => x.rows[0]);
+  const demoHh = (await one(`select id from public.households where code = 'HH-NV-0482'`)).id;
+
+  await test('wallet works for a demo device (auto-linked to the demo household)', async () => {
+    const r = await s.call('GET', '/api/wallet', { device: dev });
+    eq([r.status, r.body.householdCode], [200, 'HH-NV-0482'], 'wallet');
+  });
+
+  await test('F6: reporting 6 bins pays nothing without verified evidence', async () => {
+    const r = await s.call('POST', '/api/household/bins', { device: dev, body: { binCount: 6 } });
+    eq(r.status, 200, 'status');
+    eq(r.body.milestonesAwarded, [], 'no milestones');
+    const n = await one(`select count(*)::int n from public.credit_ledger where entry_type = 'milestone' and household_id = $1`, [demoHh]);
+    eq(n.n, 0, 'no milestone ledger rows');
+  });
+
+  await test('F3: leaderboard carries no household codes or addresses', async () => {
+    const r = await s.call('GET', '/api/ward/leaderboard', { device: dev });
+    eq(r.status, 200, 'status');
+    assert(!/HH-[A-Z]/.test(r.text), `household code leaked: ${r.text}`);
+    assert(!/Navrangpura|Shivam|Apts/i.test(r.text), `address leaked: ${r.text}`);
+  });
+
+  await test('F4: verify refuses a handoverId from another household (403, victim untouched)', async () => {
+    const w = (await one(`select id from public.wards where code = 'W12-NAVRANGPURA'`)).id;
+    const victimUser = (await one(`insert into public.users (device_id) values ('victim-dev-01') returning id`)).id;
+    const victimHh = (await one(
+      `insert into public.households (code, address, ward_id) values ('HH-VICTIM-1', 'x', $1) returning id`, [w]
+    )).id;
+    const victimH = (await one(
+      `insert into public.handovers (household_id, submitted_by, status, declared_streams)
+       values ($1, $2, 'needs_video', '{wet,dry}') returning id`, [victimHh, victimUser]
+    )).id;
+    const r = await s.submitPhoto(dev, await noiseJpeg(), { attempt: 2, handoverId: victimH });
+    eq(r.status, 403, `status (${r.text})`);
+    const v = await one(`select status from public.handovers where id = $1`, [victimH]);
+    eq(v.status, 'needs_video', 'victim handover unchanged');
+  });
+
+  await test('verify happy path: signed upload → evidence → verified, held earn row', async () => {
+    const r = await s.submitPhoto(dev, await noiseJpeg());
+    eq([r.status, r.body?.status], [200, 'verified'], `verify (${r.text})`);
+    eq(r.body.creditsAwarded, 2, 'credits');
+    const l = await s.db.query(
+      `select amount, effective_at > now() as held from public.credit_ledger where handover_id = $1`,
+      [r.body.handoverId]
+    );
+    eq(l.rows.map((x) => [x.amount, x.held]), [[2, true]], 'one held earn row');
+  });
+
+  await test('F5: further same-day verifies are rejected and never paid', async () => {
+    const results = await Promise.all([1, 2, 3].map(async () => s.submitPhoto(dev, await noiseJpeg())));
+    for (const r of results) eq([r.status, r.body?.status], [200, 'rejected'], `verify (${r.text})`);
+    const n = await one(
+      `select count(*)::int n from public.credit_ledger where household_id = $1 and entry_type = 'earn'`, [demoHh]
+    );
+    eq(n.n, 1, 'still exactly one earn row');
+  });
+
+  await test('F12: the same photo from another household is flagged as duplicate evidence', async () => {
+    // a second household with its own device, sending bytes already seen
+    const jpeg = await noiseJpeg();
+    const first = await s.submitPhoto('dup-device-aaaa', jpeg);
+    assert(first.status === 200, first.text);
+    const w = (await one(`select id from public.wards where code = 'W12-NAVRANGPURA'`)).id;
+    const u = (await one(`insert into public.users (device_id) values ('dup-device-bbbb') returning id`)).id;
+    const hh = (await one(
+      `insert into public.households (code, address, ward_id, collection_start_hour, collection_end_hour)
+       values ('HH-DUP-2', 'y', $1, 0, 24) returning id`, [w]
+    )).id;
+    await s.db.query(`insert into public.household_members (household_id, user_id, member_role) values ($1, $2, 'owner')`, [hh, u]);
+    const r = await s.submitPhoto('dup-device-bbbb', jpeg);
+    eq(r.body?.status, 'rejected', `status (${r.text})`);
+    assert((r.body.fraudSignals ?? []).includes('duplicate_phash'), `signals ${JSON.stringify(r.body.fraudSignals)}`);
+  });
+
+  await test('F7: a capture claimed 8 hours ago goes to a human, not auto-paid', async () => {
+    const w = (await one(`select id from public.wards where code = 'W12-NAVRANGPURA'`)).id;
+    const u = (await one(`insert into public.users (device_id) values ('stale-device-1') returning id`)).id;
+    const hh = (await one(
+      `insert into public.households (code, address, ward_id, collection_start_hour, collection_end_hour)
+       values ('HH-STALE-1', 'z', $1, 0, 24) returning id`, [w]
+    )).id;
+    await s.db.query(`insert into public.household_members (household_id, user_id, member_role) values ($1, $2, 'owner')`, [hh, u]);
+    const r = await s.submitPhoto('stale-device-1', await noiseJpeg(), {
+      clientCapturedAt: new Date(Date.now() - 8 * 3600_000).toISOString(),
+    });
+    eq(r.body?.status, 'in_review', `status (${r.text})`);
+    eq(r.body.creditsAwarded, 0, 'no credits yet');
+  });
+
+  await test('F11: karmachari review queue only lists their ward', async () => {
+    const other = (await one(
+      `insert into public.wards (code, name, min_lat, max_lat, min_lng, max_lng)
+       values ('W-OTHER', 'Other ward', 22, 23, 72, 73) returning id`
+    )).id;
+    const u = (await one(`insert into public.users (device_id) values ('other-ward-dev') returning id`)).id;
+    const hh = (await one(
+      `insert into public.households (code, address, ward_id) values ('HH-OTHER-1', 'o', $1) returning id`, [other]
+    )).id;
+    const h = (await one(
+      `insert into public.handovers (household_id, submitted_by, status) values ($1, $2, 'in_review') returning id`, [hh, u]
+    )).id;
+    const r = await s.call('GET', '/api/review-queue', { worker: WORKER });
+    eq(r.status, 200, 'status');
+    assert(r.body.items.length > 0, 'own-ward items visible');
+    assert(!r.body.items.some((i) => i.handover_id === h), 'other-ward item hidden');
+    const d = await s.call('POST', `/api/review-queue/${h}/decide`, { worker: WORKER, body: { decision: 'approve' } });
+    eq(d.status, 403, `cross-ward decide (${d.text})`);
+  });
+
+  await test('F5/F11: review approval respects the household daily limit', async () => {
+    // two in_review handovers for the demo household, dated today (it already has a verified one)
+    const mk = async () =>
+      (await one(
+        `insert into public.handovers (household_id, submitted_by, status, declared_streams)
+         values ($1, (select user_id from public.household_members where household_id = $1 limit 1),
+                 'in_review', '{wet,dry}') returning id`,
+        [demoHh]
+      )).id;
+    const [h1, h2] = [await mk(), await mk()];
+    const r = await s.call('POST', `/api/review-queue/${h1}/decide`, {
+      worker: WORKER,
+      body: { decision: 'approve' },
+    });
+    eq(r.status, 409, `approve when already verified today (${r.text})`);
+    const rej = await s.call('POST', `/api/review-queue/${h2}/decide`, {
+      worker: WORKER,
+      body: { decision: 'reject', reason: 'mixed' },
+    });
+    eq([rej.status, rej.body?.status], [200, 'rejected'], 'reject');
+  });
+
+  await test('doorstep issuance: pays once per day, ward-scoped', async () => {
+    const a = await s.call('POST', '/api/worker/issue', {
+      worker: WORKER,
+      body: { householdCode: 'HH-NV-0188', streams: ['wet', 'dry'] },
+    });
+    eq([a.status, a.body?.creditsAwarded], [200, 2], `first issuance (${a.text})`);
+    const b = await s.call('POST', '/api/worker/issue', {
+      worker: WORKER,
+      body: { householdCode: 'HH-NV-0188', streams: ['wet', 'dry'] },
+    });
+    eq(b.status, 409, 'second issuance same day');
+    const c = await s.call('POST', '/api/worker/issue', {
+      worker: WORKER,
+      body: { householdCode: 'HH-OTHER-1', streams: ['wet', 'dry'] },
+    });
+    eq(c.status, 403, 'other ward');
+  });
+
+  await test('errors never leak database internals', async () => {
+    const r = await s.call('POST', '/api/review-queue/not-a-uuid/decide', { worker: WORKER, body: { decision: 'approve' } });
+    assert(r.status >= 400, 'error status');
+    assert(!/invalid input syntax|uuid|violates|relation|column/i.test(r.text), `leak: ${r.text}`);
+  });
+
+  await test('ledger reconciliation is empty after the whole run', async () => {
+    const rows = (await s.db.query(`select * from public.v_ledger_reconciliation`)).rows;
+    eq(rows, [], 'reconciliation');
+  });
+} catch (e) {
+  console.log(s.log());
+  throw e;
+} finally {
+  await s.stop();
+}
+
+done();
