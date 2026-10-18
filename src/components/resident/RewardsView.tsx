@@ -4,6 +4,7 @@ import { LeafGlyph } from '../LeafGlyph';
 import { Bus, Train, Ticket, ChevronRight, AlertCircle } from 'lucide-react';
 import { redeemTicket } from '../../lib/api';
 import { serverTicketToRecord } from '../../lib/serverMap';
+import { useI18n } from '../../lib/i18n';
 
 interface RewardsViewProps {
   household: HouseholdProfile;
@@ -57,6 +58,7 @@ export const RewardsView: React.FC<RewardsViewProps> = ({
   onOpenTicketModal,
   onRefreshData,
 }) => {
+  const { t: tr } = useI18n();
   const [redeeming, setRedeeming] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -93,18 +95,18 @@ export const RewardsView: React.FC<RewardsViewProps> = ({
       <div className="bg-ink-soft border border-muted/30 rounded-lg p-4 text-tint flex items-center justify-between">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-l">
-            Available Balance
+            {tr('rewards.available')}
           </div>
           <div className="flex items-baseline gap-2 mt-0.5">
             <LeafGlyph size={22} color="#19A85B" />
             <span className="font-mono text-2xl font-bold text-white tabular-nums">
               {household.balance}
             </span>
-            <span className="text-xs text-muted-l">leaves</span>
+            <span className="text-xs text-muted-l">{tr('common.leaves')}</span>
           </div>
         </div>
         <div className="text-right text-xs text-muted-l font-mono">
-          <div>AMC Civic Economy</div>
+          <div>{tr('rewards.economy')}</div>
           <div className="text-tint font-semibold">
             {redeemCosts.janmarg_brts ?? 20} leaves = 1 free ride
           </div>
@@ -122,7 +124,7 @@ export const RewardsView: React.FC<RewardsViewProps> = ({
       {/* Reward Options */}
       <div className="space-y-2.5">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-l px-1">
-          Redeem Public Transit Tokens
+          {tr('rewards.redeemTitle')}
         </h2>
 
         <div className="space-y-2.5">
@@ -155,14 +157,14 @@ export const RewardsView: React.FC<RewardsViewProps> = ({
                       <LeafGlyph size={14} color="#19A85B" />
                       <span>{opt.cost}</span>
                     </div>
-                    <div className="text-[10px] text-muted-l">credits</div>
+                    <div className="text-[10px] text-muted-l">{tr('rewards.credits')}</div>
                   </div>
                 </div>
 
                 <div className="pt-2.5 border-t border-muted/15 flex items-center justify-between">
                   <span className="text-[11px] text-muted-l">
                     {canAfford
-                      ? 'Available to claim immediately'
+                      ? tr('rewards.claimNow')
                       : `${opt.cost - household.balance} more leaves required`}
                   </span>
 
@@ -176,10 +178,10 @@ export const RewardsView: React.FC<RewardsViewProps> = ({
                     }`}
                   >
                     {isRedeemingThis ? (
-                      <span>Issuing Ticket...</span>
+                      <span>{tr('rewards.issuing')}</span>
                     ) : (
                       <>
-                        <span>Redeem Ticket</span>
+                        <span>{tr('rewards.redeem')}</span>
                         <ChevronRight size={13} />
                       </>
                     )}
@@ -194,13 +196,13 @@ export const RewardsView: React.FC<RewardsViewProps> = ({
       {/* My Tickets Section */}
       <div className="space-y-3 pt-2">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-l px-1">
-          My Transit Tickets
+          {tr('rewards.mine')}
         </h2>
 
         {/* Active Tickets */}
         {activeTickets.length > 0 && (
           <div className="space-y-2">
-            <div className="text-[11px] font-mono text-green px-1">Active for Boarding</div>
+            <div className="text-[11px] font-mono text-green px-1">{tr('rewards.active')}</div>
             {activeTickets.map((t) => (
               <div
                 key={t.id}
@@ -219,7 +221,7 @@ export const RewardsView: React.FC<RewardsViewProps> = ({
 
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs font-semibold text-green bg-green/10 px-2 py-0.5 rounded-xs border border-green/30">
-                    Show QR
+                    {tr('rewards.showQr')}
                   </span>
                   <ChevronRight size={14} className="text-muted" />
                 </div>
@@ -231,7 +233,7 @@ export const RewardsView: React.FC<RewardsViewProps> = ({
         {/* Past Tickets */}
         {pastTickets.length > 0 && (
         <div className="space-y-1.5">
-          <div className="text-[11px] font-mono text-muted-l px-1">Past Redemptions</div>
+          <div className="text-[11px] font-mono text-muted-l px-1">{tr('rewards.past')}</div>
           {pastTickets.map((t) => (
             <div
               key={t.id}

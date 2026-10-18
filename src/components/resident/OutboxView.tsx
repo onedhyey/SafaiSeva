@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronLeft, RefreshCw, Trash2, CloudOff, Clock, AlertTriangle, UploadCloud } from 'lucide-react';
 import { QueuedCapture } from '../../lib/offlineQueue';
+import { useI18n } from '../../lib/i18n';
 
 interface OutboxViewProps {
   items: QueuedCapture[];
@@ -37,6 +38,7 @@ export const OutboxView: React.FC<OutboxViewProps> = ({
   onRetryOne,
   onDelete,
 }) => {
+  const { t: tr } = useI18n();
   const [busy, setBusy] = useState<string | null>(null); // item id or '__all__'
 
   const wrap = (key: string, fn: () => Promise<void>) => async () => {
@@ -62,10 +64,10 @@ export const OutboxView: React.FC<OutboxViewProps> = ({
           <ChevronLeft size={18} />
         </button>
         <div className="flex-1">
-          <h1 className="text-sm font-semibold text-tint">Outbox</h1>
+          <h1 className="text-sm font-semibold text-tint">{tr('outbox.title')}</h1>
           <p className="text-[11px] text-muted-l">
             {items.length === 0
-              ? 'Nothing waiting to send'
+              ? tr('outbox.nothing')
               : `${items.length} handover${items.length === 1 ? '' : 's'} waiting to upload`}
           </p>
         </div>
@@ -76,7 +78,7 @@ export const OutboxView: React.FC<OutboxViewProps> = ({
             className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-md bg-green/15 text-green border border-green/30 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <RefreshCw size={12} className={busy === '__all__' ? 'animate-spin' : ''} />
-            <span>Retry all</span>
+            <span>{tr('outbox.retryAll')}</span>
           </button>
         )}
       </div>
@@ -92,8 +94,8 @@ export const OutboxView: React.FC<OutboxViewProps> = ({
         {online ? <UploadCloud size={13} className="mt-px shrink-0" /> : <CloudOff size={13} className="mt-px shrink-0" />}
         <span>
           {online
-            ? 'You’re online. Queued handovers upload automatically; use Retry if one is stuck.'
-            : 'You’re offline. Handovers you document are saved here and sent the moment you reconnect.'}
+            ? tr('outbox.online')
+            : tr('outbox.offline')}
         </span>
       </div>
 
@@ -103,7 +105,7 @@ export const OutboxView: React.FC<OutboxViewProps> = ({
           <div className="mx-auto w-11 h-11 rounded-xl bg-ink-soft border border-muted/25 flex items-center justify-center mb-3">
             <UploadCloud size={18} />
           </div>
-          <p className="text-xs">All caught up — no handovers pending upload.</p>
+          <p className="text-xs">{tr('outbox.empty')}</p>
         </div>
       )}
 
@@ -127,7 +129,7 @@ export const OutboxView: React.FC<OutboxViewProps> = ({
                     ) : (
                       <Clock size={13} className="text-amber shrink-0" />
                     )}
-                    <span>{item.attempt === 2 ? 'Video re-check' : 'Handover'}</span>
+                    <span>{item.attempt === 2 ? tr('outbox.videoRecheck') : tr('outbox.handover')}</span>
                   </div>
                   <div className="text-[10px] font-mono text-muted-l mt-0.5">
                     captured {relTime(item.clientCapturedAt)} ·{' '}
@@ -144,7 +146,7 @@ export const OutboxView: React.FC<OutboxViewProps> = ({
                     failed ? 'bg-red/15 text-red' : 'bg-amber/15 text-amber'
                   }`}
                 >
-                  {failed ? 'Failed' : 'Queued'}
+                  {failed ? tr('outbox.failed') : tr('outbox.queued')}
                 </span>
               </div>
 
@@ -179,7 +181,7 @@ export const OutboxView: React.FC<OutboxViewProps> = ({
                     className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-xs bg-ink border border-muted/30 text-tint disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <RefreshCw size={11} className={rowBusy ? 'animate-spin' : ''} />
-                    <span>Retry</span>
+                    <span>{tr('outbox.retry')}</span>
                   </button>
                   <button
                     onClick={wrap(item.id, () => onDelete(item.id))}
@@ -187,7 +189,7 @@ export const OutboxView: React.FC<OutboxViewProps> = ({
                     className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-xs bg-ink border border-muted/30 text-muted-l hover:text-red disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Trash2 size={11} />
-                    <span>Discard</span>
+                    <span>{tr('outbox.discard')}</span>
                   </button>
                 </div>
               </div>
@@ -198,8 +200,7 @@ export const OutboxView: React.FC<OutboxViewProps> = ({
 
       {failedCount > 0 && online && (
         <p className="text-[10px] text-muted-l px-1 leading-relaxed">
-          A failed handover stays here until it sends or you discard it. Discarding does not
-          affect any handover the server already accepted.
+          {tr('outbox.note')}
         </p>
       )}
     </div>

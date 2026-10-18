@@ -3,6 +3,7 @@ import { HouseholdProfile, HandoverRecord } from '../../types';
 import { LeafGlyph } from '../LeafGlyph';
 import { Camera, Check, Clock, AlertCircle, ChevronRight, Flame, Trash2, CloudOff, UploadCloud } from 'lucide-react';
 import { BinsInfo } from '../../lib/api';
+import { useI18n } from '../../lib/i18n';
 
 interface WalletViewProps {
   household: HouseholdProfile;
@@ -27,6 +28,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
   onNavigateToOutbox,
   onSelectHandover,
 }) => {
+  const { t: tr } = useI18n();
   const nextRideTarget = 20;
   const currentBalance = household.balance;
   const progressRatio = Math.min(1, currentBalance / nextRideTarget);
@@ -66,7 +68,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
           <span className="flex-1 text-xs font-medium">
             {outboxCount > 0
               ? `${outboxCount} handover${outboxCount === 1 ? '' : 's'} waiting to upload`
-              : 'You’re offline — handovers will be saved and sent later'}
+              : tr('wallet.offline')}
           </span>
           <ChevronRight size={15} className="shrink-0 opacity-70" />
         </button>
@@ -75,7 +77,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
       {/* Hero Wallet Card */}
       <div className="bg-ink-soft border border-muted/30 rounded-lg p-6 text-tint">
         <div className="text-xs font-medium uppercase tracking-wider text-muted-l mb-1">
-          Segregation Balance
+          {tr('wallet.balance')}
         </div>
 
         {/* Hero Number */}
@@ -84,13 +86,13 @@ export const WalletView: React.FC<WalletViewProps> = ({
           <span className="font-mono text-5xl font-bold tracking-tight text-white tabular-nums">
             {currentBalance}
           </span>
-          <span className="text-sm font-medium text-muted-l">leaves</span>
+          <span className="text-sm font-medium text-muted-l">{tr('common.leaves')}</span>
         </div>
 
         {/* Ride Progress Goal */}
         <div className="mt-4 pt-4 border-t border-muted/20">
           <div className="flex items-center justify-between text-xs mb-1.5">
-            <span className="text-muted-l">Next free transit ride</span>
+            <span className="text-muted-l">{tr('wallet.nextRide')}</span>
             <span className="font-mono text-xs font-semibold text-tint tabular-nums">
               {currentBalance} / {nextRideTarget} credits
             </span>
@@ -106,7 +108,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
 
           <div className="text-[11px] text-muted-l mt-2">
             {creditsNeeded === 0
-              ? 'Ready to redeem for a Janmarg BRTS or Metro single ride'
+              ? tr('wallet.readyRedeem')
               : `${creditsNeeded} more credits needed (${Math.ceil(creditsNeeded / 2)} morning handovers)`}
           </div>
         </div>
@@ -139,7 +141,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
                         : null;
                     return next
                       ? `Reach ${next.at} bins for +${next.credits} leaves`
-                      : 'Fully sorted at source — nicely done';
+                      : tr('wallet.fullySorted');
                   })()}
                 </div>
               </div>
@@ -162,10 +164,10 @@ export const WalletView: React.FC<WalletViewProps> = ({
           className="w-full bg-green hover:bg-[#16934f] text-ink font-semibold text-sm py-3.5 px-4 rounded-md transition-colors flex items-center justify-center gap-2 shadow-xs cursor-pointer min-h-[48px]"
         >
           <Camera size={18} strokeWidth={2.2} />
-          <span>Document today&apos;s handover</span>
+          <span>{tr('wallet.document')}</span>
         </button>
         <p className="text-[11px] text-center text-muted-l mt-1.5">
-          1 leaf credit per verified stream · 2–4 per handover
+          {tr('wallet.rate')}
         </p>
       </div>
 
@@ -173,15 +175,15 @@ export const WalletView: React.FC<WalletViewProps> = ({
       <div className="space-y-2.5 pt-1">
         <div className="flex items-center justify-between px-1">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-l">
-            Recent Handover History
+            {tr('wallet.history')}
           </h2>
-          <span className="text-[11px] font-mono text-muted-l">Last 7 days</span>
+          <span className="text-[11px] font-mono text-muted-l">{tr('wallet.last7')}</span>
         </div>
 
         <div className="space-y-1.5">
           {recentHandovers.length === 0 ? (
             <div className="bg-ink-soft p-4 rounded-md text-center text-xs text-muted-l border border-muted/20">
-              No handover recorded yet today.
+              {tr('wallet.none')}
             </div>
           ) : (
             recentHandovers.map((h) => {
@@ -193,7 +195,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
                 ? Object.values(h.streamsConfirmed).filter(Boolean).length
                 : 0;
               const subtitle = isInReview
-                ? 'Queued for spot-check'
+                ? tr('wallet.spotCheck')
                 : isRejected
                 ? h.verification?.decisionReason || 'Not separated at source'
                 : `${streamCount || 2} stream${streamCount === 1 ? '' : 's'} verified`;
@@ -243,7 +245,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
                           size={12}
                           color={isVerified ? '#19A85B' : isInReview ? '#F0A83C' : '#5B6B61'}
                         />
-                        <span>{isVerified ? `+${h.creditsAwarded ?? 2}` : isInReview ? 'Held' : '0'}</span>
+                        <span>{isVerified ? `+${h.creditsAwarded ?? 2}` : isInReview ? tr('wallet.held') : '0'}</span>
                       </div>
                       <div className="text-[10px] text-muted-l font-mono">
                         {new Date(h.timestamp).toLocaleTimeString('en-IN', {
