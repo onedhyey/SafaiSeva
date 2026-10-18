@@ -3,6 +3,7 @@ import { SafaiSevaLogo } from '../SafaiSevaLogo';
 import { LeafGlyph } from '../LeafGlyph';
 import { useAuth } from '../../lib/authContext';
 import { usePwaInstall } from '../../lib/usePwaInstall';
+import { useI18n } from '../../lib/i18n';
 import {
   LogIn,
   ShieldCheck,
@@ -19,6 +20,7 @@ import {
 } from 'lucide-react';
 
 export const LoginView: React.FC = () => {
+  const { t: tr } = useI18n();
   const { signIn, hasClerkKey, openSignInModal } = useAuth();
   const { isInstalled, triggerInstall } = usePwaInstall();
   const [customName, setCustomName] = useState('');
@@ -52,14 +54,14 @@ export const LoginView: React.FC = () => {
 
         <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-950/60 border border-emerald-800/60 text-emerald-300 text-[11px] font-medium font-mono mb-2">
           <Sparkles size={12} className="text-emerald-400" />
-          <span>AHMEDABAD CIVIC WASTE EDGE</span>
+          <span>{tr('login.edge')}</span>
         </div>
 
         <h1 className="text-xl font-bold text-white tracking-tight">
-          SafaiSeva Citizen Portal
+          {tr('login.title')}
         </h1>
         <p className="text-xs text-zinc-400 max-w-xs mt-1 leading-relaxed">
-          Daily waste segregation verification, Green Leaf civic credits, and BRTS / Metro transit rewards.
+          {tr('login.sub')}
         </p>
 
         {/* Dedicated "Download as an App" action banner on login page (only on website, hidden when installed/standalone) */}
@@ -73,7 +75,7 @@ export const LoginView: React.FC = () => {
               <Download size={12} />
             </div>
             <span className="font-semibold text-emerald-400">
-              Download SafaiSeva as an App
+              {tr('login.download')}
             </span>
             <span className="text-[10px] font-mono text-zinc-400">
               (Offline PWA)
@@ -90,10 +92,10 @@ export const LoginView: React.FC = () => {
           </div>
           <div className="text-left">
             <div className="text-xs font-semibold text-zinc-200">
-              Verified 4-Stream Handovers
+              {tr('login.f1')}
             </div>
             <div className="text-[11px] text-zinc-400 leading-snug">
-              Earn +2 Green Leaves every morning for separating Wet, Dry, Sanitary & Domestic Hazard waste.
+              {tr('login.f1d')}
             </div>
           </div>
         </div>
@@ -104,10 +106,10 @@ export const LoginView: React.FC = () => {
           </div>
           <div className="text-left">
             <div className="text-xs font-semibold text-zinc-200">
-              Free Janmarg BRTS & Metro Passes
+              {tr('login.f2')}
             </div>
             <div className="text-[11px] text-zinc-400 leading-snug">
-              Exchange your civic credits for real dynamic QR travel tickets across Ahmedabad transit routes.
+              {tr('login.f2d')}
             </div>
           </div>
         </div>
@@ -118,10 +120,10 @@ export const LoginView: React.FC = () => {
           </div>
           <div className="text-left">
             <div className="text-xs font-semibold text-zinc-200">
-              Karmachari Verification
+              {tr('login.f3')}
             </div>
             <div className="text-[11px] text-zinc-400 leading-snug">
-              Sanitation workers verify collections via doorstep QR scans & spot-check overrides.
+              {tr('login.f3d')}
             </div>
           </div>
         </div>
@@ -132,7 +134,7 @@ export const LoginView: React.FC = () => {
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Lock size={14} className="text-emerald-400" />
-            <span className="text-xs font-semibold text-zinc-200">Clerk Authentication</span>
+            <span className="text-xs font-semibold text-zinc-200">{tr('login.secure')}</span>
           </div>
           <span className="text-[10px] font-mono text-zinc-400 bg-zinc-800 px-2 py-0.5 rounded">
             SSL SECURE
@@ -155,14 +157,14 @@ export const LoginView: React.FC = () => {
                 onClick={() => handleQuickLogin(customName)}
                 className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium py-2 rounded-lg transition-colors cursor-pointer"
               >
-                Continue to Role Select
+                {tr('login.continueRole')}
               </button>
               <button
                 id="custom-name-cancel-btn"
                 onClick={() => setShowCustomInput(false)}
                 className="px-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs rounded-lg transition-colors cursor-pointer"
               >
-                Cancel
+                {tr('common.cancel')}
               </button>
             </div>
           </div>
@@ -173,7 +175,7 @@ export const LoginView: React.FC = () => {
             className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 !text-white font-medium py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40 transition-all cursor-pointer group"
           >
             <LogIn size={15} className="!text-white text-white shrink-0 group-hover:translate-x-0.5 transition-transform" />
-            <span className="!text-white text-white">Log in / Sign up to SafaiSeva</span>
+            <span className="!text-white text-white">{tr('login.cta')}</span>
             <ArrowRight size={14} className="!text-white text-white shrink-0" />
           </button>
         )}
