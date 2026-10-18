@@ -13,7 +13,7 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test": "tsx tests/adjudicator.test.mjs && tsx tests/offlineQueue.test.mjs && tsx tests/serverGuards.test.mjs && tsx tests/i18n.test.mjs && tsx tests/timelapse.test.mjs",
-    "test:db": "tsx tests/db/migrations.test.mjs && tsx tests/db/creditIntegrity.test.mjs && tsx tests/db/households.test.mjs && tsx tests/db/privacy.test.mjs && tsx tests/db/moderation.test.mjs",
+    "test:db": "tsx tests/db/migrations.test.mjs && tsx tests/db/creditIntegrity.test.mjs && tsx tests/db/households.test.mjs && tsx tests/db/privacy.test.mjs && tsx tests/db/moderation.test.mjs && tsx tests/db/reviewFixes.test.mjs",
     "test:api": "tsx tests/api/api.test.mjs",
     "test:all": "npm test && npm run test:db && npm run test:api",
     "test:auth": "npm run build && node scripts/auth-smoke.mjs",

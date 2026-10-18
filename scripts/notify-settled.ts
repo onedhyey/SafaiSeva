@@ -11,7 +11,7 @@ const since = new Date(now.getTime() - windowMin * 60_000);
 const { data, error } = await admin()
   .from('credit_ledger')
   .select('household_id, amount')
-  .in('entry_type', ['earn', 'milestone'])
+  .in('entry_type', ['earn', 'milestone', 'reversal'])
   .gt('effective_at', since.toISOString())
   .lte('effective_at', now.toISOString())
   // Rows created already-settled (doorstep issuance) were announced when issued.
@@ -26,6 +26,9 @@ const totals = new Map<string, number>();
 for (const r of data ?? []) totals.set(r.household_id, (totals.get(r.household_id) ?? 0) + r.amount);
 
 for (const [householdId, amount] of totals) {
+  // Net of reversals that settle in the same window (review #6): nothing to announce if a
+  // held award was reversed.
+  if (amount <= 0) continue;
   await notifyHousehold(householdId, {
     title: 'Your leaves are ready',
     body: `${amount} leaves are now spendable on transit rewards.`,

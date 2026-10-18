@@ -38,26 +38,51 @@ export async function forgetUser(userId: string): Promise<{ removedObjects: numb
   const { data, error } = await admin().rpc('forget_user', { p_user: userId });
   if (error) throw error;
   const keys: string[] = ((data as any)?.storage_paths ?? []).filter(Boolean);
-  return { removedObjects: keys.length ? await removeEvidence(keys) : 0 };
+  if (!keys.length) return { removedObjects: 0 };
+  const removed = await removeEvidence(keys);
+  await markPurged([...removed]);
+  // Anything not confirmed removed stays due; the next purge run retries it first.
+  return { removedObjects: removed.size };
 }
 
-/** One retention pass: delete objects older than the window, mark rows purged. */
+async function markPurged(paths: string[]): Promise<number> {
+  if (!paths.length) return 0;
+  const { data: rows } = await admin()
+    .from('handover_media')
+    .select('id')
+    .in('storage_path', paths)
+    .is('purged_at', null);
+  const ids = (rows ?? []).map((r: any) => r.id);
+  if (!ids.length) return 0;
+  const { data: n, error } = await admin().rpc('mark_media_purged', { p_ids: ids });
+  if (error) throw error;
+  return Number(n ?? 0);
+}
+
+/** One retention pass: delete due objects (deleted users' first), mark only confirmed ones. */
 export async function purgeExpiredEvidence(
   days = EVIDENCE_RETENTION_DAYS,
   batchSize = 500
-): Promise<{ purged: number; removedObjects: number }> {
+): Promise<{ purged: number; removedObjects: number; failed: number }> {
   let purged = 0;
   let removedObjects = 0;
-  for (;;) {
+  let failed = 0;
+  for (let round = 0; round < 100; round++) {
     const { data, error } = await admin().rpc('media_due_for_purge', { p_days: days, p_limit: batchSize });
     if (error) throw error;
     const rows = (data ?? []) as { id: string; storage_path: string }[];
     if (!rows.length) break;
-    removedObjects += await removeEvidence(rows.map((r) => r.storage_path));
-    const { data: n, error: markErr } = await admin().rpc('mark_media_purged', { p_ids: rows.map((r) => r.id) });
-    if (markErr) throw markErr;
-    purged += Number(n ?? 0);
-    if (rows.length < batchSize) break;
+    const removed = await removeEvidence(rows.map((r) => r.storage_path));
+    removedObjects += removed.size;
+    const ok = rows.filter((r) => removed.has(r.storage_path)).map((r) => r.id);
+    failed += rows.length - ok.length;
+    if (ok.length) {
+      const { data: n, error: markErr } = await admin().rpc('mark_media_purged', { p_ids: ok });
+      if (markErr) throw markErr;
+      purged += Number(n ?? 0);
+    }
+    // Stop when nothing more could be removed this run (avoid spinning on failures).
+    if (rows.length < batchSize || ok.length === 0) break;
   }
-  return { purged, removedObjects };
+  return { purged, removedObjects, failed };
 }

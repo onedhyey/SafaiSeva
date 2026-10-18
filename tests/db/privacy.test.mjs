@@ -67,8 +67,10 @@ try {
     eq([u.clerk_user_id, u.display_name, u.consent_version, u.deleted], [null, 'Deleted user', null, true], 'anonymised');
     const loc = await one(`select client_lat, client_lng from public.handovers where id = $1`, [h]);
     eq([loc.client_lat, loc.client_lng], [null, null], 'locations removed');
-    const media = await one(`select purged_at is not null as purged from public.handover_media where storage_path = 'mine-1'`);
-    eq(media.purged, true, 'media marked purged');
+    // Marked purged only once the purge job confirms the storage object is gone (review #7);
+    // until then it is due immediately.
+    const due = (await db.query(`select storage_path from public.media_due_for_purge(90, 100)`)).rows.map((x) => x.storage_path);
+    assert(due.includes('mine-1'), 'deleted user media due for purge');
     const mem = await one(`select count(*)::int n from public.household_members where user_id = $1`, [owner]);
     eq(mem.n, 0, 'membership removed');
     const newOwner = await one(`select member_role from public.household_members where user_id = $1`, [member]);

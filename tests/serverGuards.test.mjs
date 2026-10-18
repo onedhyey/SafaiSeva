@@ -48,9 +48,16 @@ check('offline capture 40 min ago is honoured', r3.effectiveAt === recent && r3.
 const stale = new Date(now.getTime() - 7 * 3600_000).toISOString();
 const r4 = resolveCaptureTime(stale, now);
 check(
-  'F7: capture claimed 7 h ago → server time + stale_capture',
-  r4.effectiveAt === now.toISOString() && r4.signals.includes('stale_capture'),
+  'F7 / review #3: capture claimed 7 h ago keeps its own time (right day + window) but is flagged stale_capture',
+  r4.effectiveAt === stale && r4.signals.includes('stale_capture'),
   JSON.stringify(r4)
+);
+const ancient = new Date(now.getTime() - 3 * 86400_000).toISOString();
+const r4b = resolveCaptureTime(ancient, now);
+check(
+  'capture claimed 3 days ago → server time + stale_capture',
+  r4b.effectiveAt === now.toISOString() && r4b.signals.includes('stale_capture'),
+  JSON.stringify(r4b)
 );
 const future = new Date(now.getTime() + 10 * 60_000).toISOString();
 const r5 = resolveCaptureTime(future, now);

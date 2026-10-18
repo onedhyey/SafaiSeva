@@ -127,12 +127,11 @@ export async function fetchEvidence(key: string): Promise<FetchedMedia | null> {
   }
 }
 
-// Delete evidence objects (retention purge, "delete my data"). Batched; returns how many
-// keys the storage API confirmed removed. Failures are logged and the keys stay listed as
-// purged in the database, so the next purge run does not retry them — the run's log is
-// the record to follow up on.
-export async function removeEvidence(keys: string[]): Promise<number> {
-  let removed = 0;
+// Delete evidence objects (retention purge, "delete my data"). Batched. Returns the keys the
+// storage API confirmed removed — callers mark only those rows purged, so a failed delete is
+// retried by the next purge run instead of being recorded as done (review #7).
+export async function removeEvidence(keys: string[]): Promise<Set<string>> {
+  const removed = new Set<string>();
   for (let i = 0; i < keys.length; i += 100) {
     const batch = keys.slice(i, i + 100);
     const { data, error } = await admin().storage.from(BUCKET).remove(batch);
@@ -140,7 +139,7 @@ export async function removeEvidence(keys: string[]): Promise<number> {
       console.error('[storage] remove failed:', error.message, batch.length, 'keys');
       continue;
     }
-    removed += data?.length ?? 0;
+    for (const o of data ?? []) if ((o as any)?.name) removed.add((o as any).name);
   }
   return removed;
 }

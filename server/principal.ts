@@ -50,6 +50,7 @@ async function getOrCreateDeviceUser(deviceId: string): Promise<string> {
     .maybeSingle();
 
   let userId = existing?.id as string | undefined;
+  const created = !userId;
 
   if (!userId) {
     const { data, error } = await db
@@ -68,7 +69,9 @@ async function getOrCreateDeviceUser(deviceId: string): Promise<string> {
       onConflict: 'device_id',
     });
 
-  // Demo convenience: make every anonymous device a member of the demo household.
+  // Demo convenience: a brand-new anonymous device starts in the demo household. Only on
+  // creation — re-adding on every request made it impossible to leave it or join another.
+  if (!created) return userId;
   const { data: hh } = await db
     .from('households')
     .select('id')

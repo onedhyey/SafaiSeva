@@ -351,6 +351,27 @@ try {
     eq(r.status, 413, `oversized video (${r.text})`);
   });
 
+  await test('review #1: owner sees join requests by name and approves them', async () => {
+    const w = (await one(`select id from public.wards where code = 'W12-NAVRANGPURA'`)).id;
+    const ownerDev = 'own-dev-' + Math.random().toString(36).slice(2, 8);
+    const joinDev = 'join-dev-' + Math.random().toString(36).slice(2, 8);
+    const owner = (await one(`insert into public.users (device_id, display_name) values ($1, 'Owner') returning id`, [ownerDev])).id;
+    const joiner = (await one(`insert into public.users (device_id, display_name) values ($1, 'Asha') returning id`, [joinDev])).id;
+    const hh = (await one(`insert into public.households (code, address, ward_id) values ('HH-JOIN-1', 'j', $1) returning id`, [w])).id;
+    await s.db.query(`insert into public.household_members (household_id, user_id, member_role) values ($1, $2, 'owner')`, [hh, owner]);
+    const inv = await s.call('POST', '/api/household/invite', { device: ownerDev });
+    eq(inv.status, 200, `invite (${inv.text})`);
+    const req = await s.call('POST', '/api/household/join', { device: joinDev, body: { token: inv.body.token } });
+    eq([req.status, req.body?.status], [200, 'pending'], `join (${req.text})`);
+    const list = await s.call('GET', '/api/household/requests', { device: ownerDev });
+    eq(list.status, 200, `requests (${list.text})`);
+    eq(list.body.requests.map((r) => r.name), ['Asha'], 'request listed with name');
+    const dec = await s.call('POST', `/api/household/requests/${list.body.requests[0].id}/decide`, { device: ownerDev, body: { approve: true } });
+    eq([dec.status, dec.body?.status], [200, 'approved'], `approve (${dec.text})`);
+    const m = await one(`select household_id from public.household_members where user_id = $1`, [joiner]);
+    eq(m.household_id, hh, 'joined');
+  });
+
   await test('ledger reconciliation is empty after the whole run', async () => {
     const rows = (await s.db.query(`select * from public.v_ledger_reconciliation`)).rows;
     eq(rows, [], 'reconciliation');

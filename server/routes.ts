@@ -355,12 +355,15 @@ export function mountApiRoutes(app: Express) {
       if (handoverId) {
         const { data: own } = await db
           .from('handovers')
-          .select('id, status')
+          .select('id, status, decision_reason_code')
           .eq('id', handoverId)
           .eq('household_id', hh.id)
           .maybeSingle();
         if (!own) return fail(res, 403, 'This handover does not belong to your household.');
         if (own.status === 'verified') return fail(res, 409, 'This handover was already approved.');
+        if (own.decision_reason_code === 'REVERSED_BY_OFFICER') {
+          return failDb(res, { message: 'already_reversed' });
+        }
       }
 
       if (!handoverId && idemKey) {
@@ -568,6 +571,25 @@ export function mountApiRoutes(app: Express) {
       if (decErr) return failDb(res, decErr);
 
       const settled: any = outcome;
+      // The handover was already verified by a concurrent request: report what stands, not
+      // this run's (discarded) adjudication.
+      if (settled?.replay) {
+        const { data: cur } = await db
+          .from('handovers')
+          .select('status, credits_awarded, confirmed_streams, decision_reason_code, decision_reason_text, settle_at')
+          .eq('id', handoverId)
+          .maybeSingle();
+        return res.json({
+          handoverId,
+          status: cur?.status ?? 'verified',
+          reasonCode: cur?.decision_reason_code ?? 'OK_VERIFIED',
+          reasonText: cur?.decision_reason_text ?? '',
+          creditsAwarded: cur?.credits_awarded ?? settled.credits_awarded ?? 0,
+          confirmedStreams: cur?.confirmed_streams ?? [],
+          settleAt: cur?.settle_at ?? null,
+          idempotentReplay: true,
+        });
+      }
       if (settled?.daily_limit) {
         return res.json({
           handoverId,
@@ -694,10 +716,14 @@ export function mountApiRoutes(app: Express) {
       const db = admin();
       const { data: h } = await db
         .from('handovers')
-        .select('id, household_id, status')
+        .select('id, household_id, status, decision_reason_code')
         .eq('id', req.params.id)
         .maybeSingle();
       if (!h) return fail(res, 404, 'Handover not found.');
+      // An officer's reversal is final; the reason was sent to the household.
+      if (h.decision_reason_code === 'REVERSED_BY_OFFICER') {
+        return fail(res, 409, 'This award was reversed by the ward office and cannot be disputed here.');
+      }
 
       const { data: member } = await db
         .from('household_members')
@@ -1127,7 +1153,7 @@ export function mountApiRoutes(app: Express) {
       if (!hh) return res.json({ requests: [] });
       const { data, error } = await admin()
         .from('household_join_requests')
-        .select('id, created_at, user:users(display_name)')
+        .select('id, created_at, user:users!household_join_requests_user_id_fkey(display_name)')
         .eq('household_id', hh.id)
         .eq('status', 'pending')
         .order('created_at', { ascending: true });
@@ -1162,6 +1188,9 @@ export function mountApiRoutes(app: Express) {
       });
       if (error) return failDb(res, error);
       const out: any = data;
+      if (out.status === 'cancelled') {
+        return fail(res, 409, 'This person has already joined another household; the request was closed.');
+      }
       if (out.user_id) {
         void notifyUsers([out.user_id], {
           title: out.status === 'approved' ? 'You joined the household' : 'Join request declined',

@@ -295,6 +295,33 @@ export default function App() {
     loadData();
   }, [loadData]);
 
+  // Notification taps (and links) carry ?tab=wallet|rewards|impact or ?settings=…; open
+  // that screen — but never yank a resident out of an in-progress capture.
+  useEffect(() => {
+    const open = (raw: string) => {
+      let url: URL;
+      try {
+        url = new URL(raw, window.location.origin);
+      } catch {
+        return;
+      }
+      const tab = url.searchParams.get('tab');
+      if (tab && ['wallet', 'rewards', 'impact'].includes(tab)) {
+        setResidentTab((cur) => (cur === 'document' ? cur : (tab as ResidentTab)));
+      }
+      if (url.searchParams.has('settings')) setIsSettingsOpen(true);
+    };
+    if (window.location.search) {
+      open(window.location.href);
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'open-target' && typeof e.data.url === 'string') open(e.data.url);
+    };
+    navigator.serviceWorker?.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker?.removeEventListener('message', onMessage);
+  }, []);
+
   // Keep the wallet fresh when the resident moves between tabs (audit F1).
   useEffect(() => {
     if (!loading) loadData();

@@ -77,8 +77,10 @@ self.addEventListener('notificationclick', (event) => {
       const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
       for (const w of wins) {
         if (new URL(w.url).origin === self.location.origin) {
+          // Never reload an open app (it may be mid-capture): focus it and let it switch
+          // screens itself.
           await w.focus();
-          if ('navigate' in w) await (w as WindowClient).navigate(target).catch(() => undefined);
+          w.postMessage({ type: 'open-target', url: target });
           return;
         }
       }
