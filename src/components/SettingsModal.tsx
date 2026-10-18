@@ -21,6 +21,8 @@ import { HouseholdMembersPanel } from './resident/HouseholdMembersPanel';
 import { DeleteMyDataSection } from './DeleteMyDataSection';
 import { NotificationsSection } from './NotificationsSection';
 import { useI18n, LANGS } from '../lib/i18n';
+import { HelpCenter } from './HelpCenter';
+import { HelpCircle } from 'lucide-react';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -49,6 +51,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const { lang, setLang, t } = useI18n();
   const [resetting, setResetting] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [resetDone, setResetDone] = useState(false);
   const { isInstalled, isIos, hasNativePrompt, showInstallModal, setShowInstallModal, triggerInstall } = usePwaInstall();
 
@@ -131,6 +134,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <X size={16} />
             </button>
           </div>
+
+          {/* Help centre */}
+          <button
+            type="button"
+            onClick={() => setHelpOpen(true)}
+            className="mt-3.5 w-full flex items-center gap-2.5 bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 rounded-lg p-3 text-left cursor-pointer min-h-[48px]"
+          >
+            <HelpCircle size={16} className="text-emerald-400 shrink-0" aria-hidden="true" />
+            <span className="text-xs font-semibold text-white flex-1">{t('help.open')}</span>
+            <span className="text-zinc-500 text-xs" aria-hidden="true">›</span>
+          </button>
 
           {/* Language */}
           <div className="mt-3.5">
@@ -359,6 +373,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <DeleteMyDataSection />
         </div>
       </div>
+
+      <HelpCenter isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
 
       {/* Standalone Install Guidance Modal */}
       <InstallModal
