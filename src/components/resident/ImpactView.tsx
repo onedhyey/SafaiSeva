@@ -2,6 +2,7 @@ import React from 'react';
 import { HouseholdProfile, WardStats, HandoverRecord } from '../../types';
 import { LeafGlyph } from '../LeafGlyph';
 import { Bus, Recycle, Award, CheckCircle, TrendingUp } from 'lucide-react';
+import { useI18n } from '../../lib/i18n';
 
 interface ImpactViewProps {
   household: HouseholdProfile;
@@ -14,6 +15,7 @@ export const ImpactView: React.FC<ImpactViewProps> = ({
   wardStats,
   handovers,
 }) => {
+  const { t: tr } = useI18n();
   const verifiedCount = handovers.filter(
     (h) => h.householdId === household.id && h.status === 'verified'
   ).length;
@@ -33,7 +35,7 @@ export const ImpactView: React.FC<ImpactViewProps> = ({
     <div className="space-y-5 pb-20 pt-1 text-left select-none">
       {/* Header */}
       <div className="px-1">
-        <h1 className="text-sm font-semibold text-white">Civic & Environmental Impact</h1>
+        <h1 className="text-sm font-semibold text-white">{tr('impact.title')}</h1>
         <p className="text-xs text-muted-l">Real-time diversion analytics for {household.ward}</p>
       </div>
 
@@ -44,14 +46,14 @@ export const ImpactView: React.FC<ImpactViewProps> = ({
           <div className="flex items-center gap-1.5 text-green">
             <Recycle size={15} />
             <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-l">
-              Diverted
+              {tr('impact.diverted')}
             </span>
           </div>
           <div className="font-mono text-2xl font-bold text-white tabular-nums">
-            {kgDiverted} <span className="text-xs font-normal text-muted-l">kg</span>
+            {kgDiverted} <span className="text-xs font-normal text-muted-l">{tr('impact.kg')}</span>
           </div>
           <p className="text-[10px] text-muted-l leading-tight">
-            Kept out of Pirana dumpsite through clean segregation
+            {tr('impact.divertedSub')}
           </p>
         </div>
 
@@ -60,14 +62,14 @@ export const ImpactView: React.FC<ImpactViewProps> = ({
           <div className="flex items-center gap-1.5 text-tint">
             <CheckCircle size={15} />
             <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-l">
-              Handovers
+              {tr('impact.handovers')}
             </span>
           </div>
           <div className="font-mono text-2xl font-bold text-white tabular-nums">
             {verifiedCount}
           </div>
           <p className="text-[10px] text-muted-l leading-tight">
-            AMC compliant morning door-to-door handovers
+            {tr('impact.handoversSub')}
           </p>
         </div>
 
@@ -76,14 +78,14 @@ export const ImpactView: React.FC<ImpactViewProps> = ({
           <div className="flex items-center gap-1.5 text-green">
             <LeafGlyph size={14} color="#19A85B" />
             <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-l">
-              Leaf balance
+              {tr('impact.balance')}
             </span>
           </div>
           <div className="font-mono text-2xl font-bold text-white tabular-nums">
-            {household.balance} <span className="text-xs font-normal text-muted-l">leaves</span>
+            {household.balance} <span className="text-xs font-normal text-muted-l">{tr('common.leaves')}</span>
           </div>
           <p className="text-[10px] text-muted-l leading-tight">
-            Spendable on Janmarg and Metro transit fares
+            {tr('impact.balanceSub')}
           </p>
         </div>
 
@@ -92,14 +94,14 @@ export const ImpactView: React.FC<ImpactViewProps> = ({
           <div className="flex items-center gap-1.5 text-amber">
             <Bus size={15} />
             <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-l">
-              Rides
+              {tr('impact.rides')}
             </span>
           </div>
           <div className="font-mono text-2xl font-bold text-white tabular-nums">
             {household.ridesTaken}
           </div>
           <p className="text-[10px] text-muted-l leading-tight">
-            Free Janmarg & Metro rides redeemed to date
+            {tr('impact.ridesSub')}
           </p>
         </div>
       </div>
@@ -122,7 +124,7 @@ export const ImpactView: React.FC<ImpactViewProps> = ({
         </div>
 
         <div className="flex items-center justify-between text-[11px] text-muted-l font-mono">
-          <span>Target: 75% for Ward Clean Bonus</span>
+          <span>{tr('impact.target')}</span>
           <span className="text-green flex items-center gap-1">
             <TrendingUp size={12} />
             <span>+{participationDelta}% vs last week</span>
@@ -136,10 +138,10 @@ export const ImpactView: React.FC<ImpactViewProps> = ({
           <div className="flex items-center gap-1.5">
             <Award size={14} className="text-amber" />
             <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-l">
-              Ward Segregation Leaderboard
+              {tr('impact.leaderboard')}
             </h2>
           </div>
-          <span className="text-[11px] text-muted-l font-mono">Last 30 days</span>
+          <span className="text-[11px] text-muted-l font-mono">{tr('impact.last30')}</span>
         </div>
 
         <div className="bg-ink-soft border border-muted/20 rounded-lg divide-y divide-muted/15 overflow-hidden">

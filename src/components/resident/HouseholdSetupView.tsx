@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Home, Users, Copy, Check, ArrowRight, AlertTriangle } from 'lucide-react';
 import { createHousehold, requestToJoinHousehold, createHouseholdInvite } from '../../lib/api';
+import { useI18n } from '../../lib/i18n';
 
 interface HouseholdSetupViewProps {
   /** Called once the account is attached to a household (created or joined). */
@@ -22,6 +23,7 @@ function getPosition(): Promise<{ lat: number; lng: number } | null> {
 }
 
 export const HouseholdSetupView: React.FC<HouseholdSetupViewProps> = ({ onLinked }) => {
+  const { t: tr } = useI18n();
   const [mode, setMode] = useState<Mode>('create');
   const [address, setAddress] = useState('');
   const [joinCode, setJoinCode] = useState('');
@@ -98,20 +100,19 @@ export const HouseholdSetupView: React.FC<HouseholdSetupViewProps> = ({ onLinked
     return (
       <div className="space-y-4 pb-20 pt-1 text-left select-none">
         <div className="px-1">
-          <h1 className="text-sm font-semibold text-white">Household created</h1>
-          <p className="text-xs text-muted-l">Share this code with everyone in your home.</p>
+          <h1 className="text-sm font-semibold text-white">{tr('hh.created')}</h1>
+          <p className="text-xs text-muted-l">{tr('hh.createdSub')}</p>
         </div>
 
         <div className="bg-ink-soft border border-muted/30 rounded-lg p-5 text-center space-y-3">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-l">
-            Household code
+            {tr('hh.code')}
           </div>
           <div className="font-mono text-2xl font-bold text-white tracking-[0.15em] tabular-nums">
             {created.code}
           </div>
           <p className="text-[11px] text-muted-l leading-relaxed max-w-[280px] mx-auto">
-            This identifies your home to karmacharis. To add family, send them an invite code —
-            you approve each person. Credits and daily limits are shared across the household.
+            {tr('hh.codeNote')}
           </p>
           {invite ? (
             <div className="space-y-2">
@@ -122,7 +123,7 @@ export const HouseholdSetupView: React.FC<HouseholdSetupViewProps> = ({ onLinked
                 className="inline-flex items-center gap-1.5 text-xs font-semibold text-green bg-green/10 border border-green/30 px-3 py-1.5 rounded-md hover:bg-green/20 transition-colors cursor-pointer min-h-[36px]"
               >
                 {copied ? <Check size={13} /> : <Copy size={13} />}
-                <span>{copied ? 'Copied' : 'Copy invite code'}</span>
+                <span>{copied ? tr('members.copied') : tr('hh.copyInvite')}</span>
               </button>
             </div>
           ) : (
@@ -133,7 +134,7 @@ export const HouseholdSetupView: React.FC<HouseholdSetupViewProps> = ({ onLinked
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-green bg-green/10 border border-green/30 px-3 py-1.5 rounded-md hover:bg-green/20 transition-colors cursor-pointer min-h-[36px] disabled:opacity-50"
             >
               <Users size={13} />
-              <span>Invite a family member</span>
+              <span>{tr('members.invite')}</span>
             </button>
           )}
         </div>
@@ -153,7 +154,7 @@ export const HouseholdSetupView: React.FC<HouseholdSetupViewProps> = ({ onLinked
           onClick={() => onLinked()}
           className="w-full bg-green hover:bg-[#16934f] text-white font-bold text-xs py-3.5 rounded-md flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[46px]"
         >
-          <span>Continue to my wallet</span>
+          <span>{tr('hh.continue')}</span>
           <ArrowRight size={14} />
         </button>
       </div>
@@ -165,9 +166,9 @@ export const HouseholdSetupView: React.FC<HouseholdSetupViewProps> = ({ onLinked
     return (
       <div className="space-y-4 pb-20 pt-1 text-left select-none">
         <div className="px-1">
-          <h1 className="text-sm font-semibold text-white">Request sent</h1>
+          <h1 className="text-sm font-semibold text-white">{tr('hh.sent')}</h1>
           <p className="text-xs text-muted-l">
-            The household owner needs to approve you. Ask them to open Settings → Household members.
+            {tr('hh.sentSub')}
           </p>
         </div>
         <button
@@ -175,7 +176,7 @@ export const HouseholdSetupView: React.FC<HouseholdSetupViewProps> = ({ onLinked
           onClick={() => onLinked()}
           className="w-full bg-green hover:bg-[#16934f] text-white font-bold text-xs py-3.5 rounded-md flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[46px]"
         >
-          <span>I've been approved — continue</span>
+          <span>{tr('hh.approved')}</span>
           <ArrowRight size={14} />
         </button>
       </div>
@@ -186,10 +187,9 @@ export const HouseholdSetupView: React.FC<HouseholdSetupViewProps> = ({ onLinked
   return (
     <div className="space-y-4 pb-20 pt-1 text-left select-none">
       <div className="px-1">
-        <h1 className="text-sm font-semibold text-white">Set up your household</h1>
+        <h1 className="text-sm font-semibold text-white">{tr('hh.setup')}</h1>
         <p className="text-xs text-muted-l">
-          A household is one home's shared segregation record. Create one if you're the first
-          from your home; otherwise join with an invite code from the household owner.
+          {tr('hh.setupSub')}
         </p>
       </div>
 
@@ -208,7 +208,7 @@ export const HouseholdSetupView: React.FC<HouseholdSetupViewProps> = ({ onLinked
           }`}
         >
           <Home size={14} className={mode === 'create' ? 'text-green' : ''} />
-          <span>Create new</span>
+          <span>{tr('hh.createNew')}</span>
         </button>
         <button
           type="button"
@@ -223,7 +223,7 @@ export const HouseholdSetupView: React.FC<HouseholdSetupViewProps> = ({ onLinked
           }`}
         >
           <Users size={14} className={mode === 'join' ? 'text-green' : ''} />
-          <span>Join with invite</span>
+          <span>{tr('hh.joinInvite')}</span>
         </button>
       </div>
 
@@ -237,12 +237,11 @@ export const HouseholdSetupView: React.FC<HouseholdSetupViewProps> = ({ onLinked
       {mode === 'create' ? (
         <div className="bg-ink-soft border border-muted/30 rounded-lg p-4 space-y-3">
           <p className="text-[11px] text-muted-l leading-relaxed">
-            You'll be the owner and can invite your family so everyone documents the same bins.
-            Credits and daily limits are per household.
+            {tr('hh.ownerNote')}
           </p>
           <div className="space-y-1.5">
             <label className="block text-[11px] font-mono uppercase tracking-wider text-muted-l">
-              Home address <span className="normal-case font-sans">(optional)</span>
+              {tr('hh.address')} <span className="normal-case font-sans">(optional)</span>
             </label>
             <input
               type="text"
@@ -258,17 +257,17 @@ export const HouseholdSetupView: React.FC<HouseholdSetupViewProps> = ({ onLinked
             disabled={busy}
             className="w-full bg-green hover:bg-[#16934f] text-white font-bold text-xs py-3 rounded-md transition-colors cursor-pointer min-h-[44px] disabled:opacity-50"
           >
-            {busy ? 'Creating…' : 'Create household'}
+            {busy ? tr('hh.creating') : tr('hh.create')}
           </button>
         </div>
       ) : (
         <div className="bg-ink-soft border border-muted/30 rounded-lg p-4 space-y-3">
           <p className="text-[11px] text-muted-l leading-relaxed">
-            Enter the invite code the household owner shared. They'll approve your request.
+            {tr('hh.joinNote')}
           </p>
           <div className="space-y-1.5">
             <label className="block text-[11px] font-mono uppercase tracking-wider text-muted-l">
-              Invite code
+              {tr('hh.inviteCode')}
             </label>
             <input
               type="text"
@@ -285,7 +284,7 @@ export const HouseholdSetupView: React.FC<HouseholdSetupViewProps> = ({ onLinked
             disabled={busy}
             className="w-full bg-green hover:bg-[#16934f] text-white font-bold text-xs py-3 rounded-md transition-colors cursor-pointer min-h-[44px] disabled:opacity-50"
           >
-            {busy ? 'Sending…' : 'Ask to join'}
+            {busy ? tr('hd.sending') : tr('hh.ask')}
           </button>
         </div>
       )}

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { LeafGlyph } from '../LeafGlyph';
 import { getWorkerProfile, getOfficerDashboard } from '../../lib/api';
+import { useI18n } from '../../lib/i18n';
 
 interface RoleSelectionModalProps {
   isOpen: boolean;
@@ -31,6 +32,7 @@ export const RoleSelectionModal: React.FC<RoleSelectionModalProps> = ({
   onClose,
   canCancel = false,
 }) => {
+  const { t: tr } = useI18n();
   const { user, setSelectedRole, authEnabled } = useAuth();
 
   // Sub-stages: 'select' | 'karmachari_code' | 'officer_code'
@@ -174,7 +176,7 @@ export const RoleSelectionModal: React.FC<RoleSelectionModalProps> = ({
         <div className="flex items-center justify-between pb-3 border-b border-zinc-800 shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            <h2 className="text-sm font-semibold text-white">Select Account Role</h2>
+            <h2 className="text-sm font-semibold text-white">{tr('role.title')}</h2>
           </div>
           {canCancel && onClose && (
             <button
@@ -217,7 +219,7 @@ export const RoleSelectionModal: React.FC<RoleSelectionModalProps> = ({
           {stage === 'select' && (
             <>
               <p className="text-xs text-zinc-300">
-                Please designate your active role in the SafaiSeva AMC Waste Segregation network:
+                {tr('role.sub')}
               </p>
 
               <div className="space-y-2.5">
@@ -234,17 +236,17 @@ export const RoleSelectionModal: React.FC<RoleSelectionModalProps> = ({
                   <div className="flex-1">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-white group-hover:text-emerald-300 transition-colors">
-                        Normal Resident (નાગરિક)
+                        {tr('role.resident')}
                       </span>
                       <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded">
-                        Standard
+                        {tr('role.standard')}
                       </span>
                     </div>
                     <p className="text-[11px] text-zinc-400 mt-1 leading-snug">
-                      Log daily 4-stream waste handovers, earn Green Credits, and redeem free Ahmedabad BRTS / Metro transit passes.
+                      {tr('role.residentDesc')}
                     </p>
                     <div className="mt-2 flex items-center gap-1 text-[11px] text-emerald-400 font-medium group-hover:translate-x-0.5 transition-transform">
-                      <span>Enter as Resident</span>
+                      <span>{tr('role.enterResident')}</span>
                       <ArrowRight size={13} />
                     </div>
                   </div>
@@ -263,7 +265,7 @@ export const RoleSelectionModal: React.FC<RoleSelectionModalProps> = ({
                   <div className="flex-1">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-white group-hover:text-amber-300 transition-colors">
-                        Karmachari (કર્મચારી)
+                        {tr('role.karmachari')}
                       </span>
                       <span className="text-[10px] font-mono text-amber-400 bg-amber-950/80 px-1.5 py-0.5 rounded flex items-center gap-1">
                         <KeyRound size={10} />
@@ -271,7 +273,7 @@ export const RoleSelectionModal: React.FC<RoleSelectionModalProps> = ({
                       </span>
                     </div>
                     <p className="text-[11px] text-zinc-400 mt-1 leading-snug">
-                      Sanitation worker console for doorstep QR scanning, spot-check reviews, and offline manual credit issuance.
+                      {tr('role.karmachariDesc')}
                     </p>
                     <div className="mt-2 flex items-center gap-1 text-[11px] text-amber-400 font-medium group-hover:translate-x-0.5 transition-transform">
                       <span>Verify with Ward Code</span>
@@ -293,7 +295,7 @@ export const RoleSelectionModal: React.FC<RoleSelectionModalProps> = ({
                   <div className="flex-1">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-white group-hover:text-blue-300 transition-colors">
-                        Ward Officer (અધિકારી)
+                        {tr('role.officer')}
                       </span>
                       <span className="text-[10px] font-mono text-blue-400 bg-blue-950/80 border border-blue-800/60 px-1.5 py-0.5 rounded flex items-center gap-1">
                         <KeyRound size={10} />
@@ -301,7 +303,7 @@ export const RoleSelectionModal: React.FC<RoleSelectionModalProps> = ({
                       </span>
                     </div>
                     <p className="text-[11px] text-zinc-400 mt-1 leading-snug">
-                      Administrative portal for municipal ward waste metrics, route audits, participation analytics, and anomaly flags.
+                      {tr('role.officerDesc')}
                     </p>
                     <div className="mt-2 flex items-center gap-1 text-[11px] text-blue-400 font-medium group-hover:translate-x-0.5 transition-transform">
                       <span>Access with Demo Code</span>

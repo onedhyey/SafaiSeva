@@ -38,6 +38,7 @@ import {
 } from '../../lib/timelapse';
 import { analyse, analyseVideo, OfflineSubmitError, checklistToArray } from '../../lib/verification';
 import { dataUrlToBlob } from '../../lib/api';
+import { useI18n } from '../../lib/i18n';
 import { enqueueCapture } from '../../lib/offlineQueue';
 import { coordLabel, reverseGeocode } from '../../lib/geocode';
 
@@ -133,17 +134,18 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
   const recordingStartRef = useRef<number>(0);
   const recordingMimeRef = useRef<string>('video/webm');
   const [timelapseProgress, setTimelapseProgress] = useState<number | null>(null);
+  const { t: tr } = useI18n();
 
   const photoStages = [
-    { id: '1', name: 'Detecting waste streams', desc: 'Segmenting declared stream containers' },
-    { id: '2', name: 'Checking for cross-contamination', desc: 'Analyzing organic purity & film liners' },
-    { id: '3', name: 'Confirming location and time', desc: 'Validating GPS polygon & morning window' },
+    { id: '1', name: tr('doc.stage1'), desc: tr('doc.stage1d') },
+    { id: '2', name: tr('doc.stage2'), desc: tr('doc.stage2d') },
+    { id: '3', name: tr('doc.stage3'), desc: tr('doc.stage3d') },
   ];
 
   const videoStages = [
-    { id: '1', name: 'Multi-angle stream sweep', desc: 'Analyzing 360° pan across all containers' },
-    { id: '2', name: 'Deep compartment inspection', desc: 'Validating container interiors & separation' },
-    { id: '3', name: 'Final AI evaluation', desc: 'Calculating dynamic Leaf Credits' },
+    { id: '1', name: tr('doc.vstage1'), desc: tr('doc.vstage1d') },
+    { id: '2', name: tr('doc.vstage2'), desc: tr('doc.vstage2d') },
+    { id: '3', name: tr('doc.vstage3'), desc: tr('doc.vstage3d') },
   ];
 
   // Stop active video tracks
@@ -631,14 +633,14 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
           {/* Header */}
           <div className="flex items-center justify-between px-1">
             <div>
-              <h1 className="text-sm font-semibold text-white">Capture Handover</h1>
-              <p className="text-xs text-muted-l">Align segregated waste bins in frame</p>
+              <h1 className="text-sm font-semibold text-white">{tr('doc.h.capture')}</h1>
+              <p className="text-xs text-muted-l">{tr('doc.h.captureSub')}</p>
             </div>
             <button
               onClick={onCancel}
               className="text-xs text-muted-l hover:text-white px-2.5 py-1 rounded-sm bg-ink-soft border border-muted/20 transition-colors"
             >
-              Cancel
+              {tr('doc.cancel')}
             </button>
           </div>
 
@@ -659,10 +661,10 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
               <div className="flex items-center justify-between">
                 <div className="inline-flex items-center gap-1.5 font-mono text-[10px] bg-black/60 text-green px-2 py-0.5 rounded-sm border border-green/30 backdrop-blur-xs">
                   <div className="w-1.5 h-1.5 rounded-full bg-green animate-pulse" />
-                  <span>PHOTO CAMERA</span>
+                  <span>{tr('doc.photoCamera')}</span>
                 </div>
                 <div className="font-mono text-[10px] text-muted-l bg-black/60 px-2 py-0.5 rounded-sm border border-muted/30 backdrop-blur-xs">
-                  AI VISION CHECK
+                  {tr('doc.aiCheck')}
                 </div>
               </div>
 
@@ -673,7 +675,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-white/70 rounded-bl-sm" />
                 <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-white/70 rounded-br-sm" />
                 <div className="text-[11px] font-medium text-white/80 bg-black/50 px-2.5 py-1 rounded-sm backdrop-blur-xs text-center border border-white/10">
-                  Point camera at segregated bins
+                  {tr('doc.point')}
                 </div>
               </div>
 
@@ -692,7 +694,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                   title="Edit handover location"
                 >
                   <Edit3 size={11} />
-                  <span>Edit</span>
+                  <span>{tr('doc.edit')}</span>
                 </button>
               </div>
             </div>
@@ -702,10 +704,9 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
               <div className="absolute inset-0 bg-ink/95 p-4 flex flex-col items-center justify-center text-center space-y-3">
                 <RefreshCw size={28} className="text-green animate-spin" />
                 <div>
-                  <div className="text-xs font-semibold text-tint">Waiting for camera</div>
+                  <div className="text-xs font-semibold text-tint">{tr('doc.waitingCamera')}</div>
                   <p className="text-[11px] text-muted-l mt-1 max-w-[260px] leading-relaxed">
-                    Tap <span className="font-semibold text-tint">Allow</span> when your browser asks
-                    for camera access. The live feed is the only way to submit a handover.
+{tr('doc.allowCamera')}
                   </p>
                 </div>
               </div>
@@ -716,7 +717,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
               <div className="absolute inset-0 bg-ink/95 p-4 flex flex-col items-center justify-center text-center space-y-3">
                 <AlertTriangle size={32} className="text-amber" />
                 <div>
-                  <div className="text-xs font-semibold text-tint">Camera Feed Inactive</div>
+                  <div className="text-xs font-semibold text-tint">{tr('doc.cameraInactive')}</div>
                   <p className="text-[11px] text-muted-l mt-1 max-w-[260px] leading-relaxed">
                     {cameraError}
                   </p>
@@ -728,12 +729,11 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                     className="bg-green hover:bg-[#16934f] text-ink text-xs font-semibold px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <RefreshCw size={12} />
-                    <span>Retry Camera</span>
+                    <span>{tr('doc.retryCamera')}</span>
                   </button>
                 </div>
                 <p className="text-[10px] text-muted-l max-w-[260px] leading-relaxed">
-                  A live camera is required to submit a handover. Photos cannot be imported from your
-                  gallery. Check camera permissions for this site and try again.
+                  {tr('doc.liveOnly')}
                 </p>
               </div>
             )}
@@ -744,7 +744,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
             <button
               type="button"
               onClick={toggleFacingMode}
-              aria-label="Switch camera facing mode"
+              aria-label={tr('doc.switchCamera')}
               className="p-2.5 rounded-full bg-ink hover:bg-muted/20 border border-muted/30 text-tint transition-colors cursor-pointer"
             >
               <FlipHorizontal size={18} />
@@ -754,7 +754,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
               type="button"
               onClick={captureLivePhoto}
               disabled={!isCameraActive}
-              aria-label="Capture waste photo"
+              aria-label={tr('doc.capture')}
               className="w-16 h-16 rounded-full border-4 border-white/80 flex items-center justify-center bg-white/20 active:scale-90 transition-transform cursor-pointer shadow-lg hover:border-green group disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <div className="w-11 h-11 rounded-full bg-white group-hover:bg-green transition-colors" />
@@ -773,14 +773,14 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
         <div className="space-y-4">
           <div className="flex items-center justify-between px-1">
             <div>
-              <h1 className="text-sm font-semibold text-white">Segregation Options</h1>
-              <p className="text-xs text-muted-l">Select applicable streams present in photo</p>
+              <h1 className="text-sm font-semibold text-white">{tr('doc.h.streams')}</h1>
+              <p className="text-xs text-muted-l">{tr('doc.h.streamsSub')}</p>
             </div>
             <button
               onClick={onCancel}
               className="text-xs text-muted-l hover:text-white px-2 py-1"
             >
-              Cancel
+              {tr('doc.cancel')}
             </button>
           </div>
 
@@ -792,7 +792,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
               className="w-full h-full object-contain"
             />
             <div className="absolute top-2 left-2 font-mono text-[10px] bg-ink/90 text-green px-2 py-0.5 rounded-sm border border-green/30 backdrop-blur-xs">
-              PHOTO READY
+              {tr('doc.photoReady')}
             </div>
             <button
               type="button"
@@ -800,7 +800,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
               className="absolute bottom-2 right-2 bg-ink/90 hover:bg-ink text-white text-xs font-medium px-2.5 py-1.5 rounded-md border border-muted/40 flex items-center gap-1.5 transition-colors cursor-pointer backdrop-blur-xs shadow-sm"
             >
               <Camera size={13} />
-              <span>Retake Photo</span>
+              <span>{tr('doc.retake')}</span>
             </button>
           </div>
 
@@ -808,7 +808,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
           <div className="space-y-2">
             <div className="flex items-center justify-between px-1">
               <label className="block text-xs font-semibold uppercase tracking-wider text-muted-l">
-                Declared Waste Streams
+                {tr('doc.declared')}
               </label>
               <span className="text-[11px] font-mono text-tint">
                 {selectedStreamCount} of 4 selected
@@ -829,9 +829,9 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 <div>
                   <div className="flex items-center gap-1.5">
                     <div className="w-2.5 h-2.5 rounded-xs bg-green" />
-                    <span className="text-xs font-semibold text-tint">Wet Stream</span>
+                    <span className="text-xs font-semibold text-tint">{tr('doc.wet')}</span>
                   </div>
-                  <div className="text-[11px] text-muted-l mt-0.5">લીલો કચરો (Organic/Food)</div>
+                  <div className="text-[11px] text-muted-l mt-0.5">{tr('doc.wetHint')}</div>
                 </div>
                 <div
                   className={`w-4 h-4 rounded-xs border flex items-center justify-center shrink-0 ${
@@ -855,9 +855,9 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 <div>
                   <div className="flex items-center gap-1.5">
                     <div className="w-2.5 h-2.5 rounded-xs bg-muted-l" />
-                    <span className="text-xs font-semibold text-tint">Dry Stream</span>
+                    <span className="text-xs font-semibold text-tint">{tr('doc.dry')}</span>
                   </div>
-                  <div className="text-[11px] text-muted-l mt-0.5">સૂકો કચરો (Paper/Plastic)</div>
+                  <div className="text-[11px] text-muted-l mt-0.5">{tr('doc.dryHint')}</div>
                 </div>
                 <div
                   className={`w-4 h-4 rounded-xs border flex items-center justify-center shrink-0 ${
@@ -881,9 +881,9 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 <div>
                   <div className="flex items-center gap-1.5">
                     <div className="w-2.5 h-2.5 rounded-xs bg-amber" />
-                    <span className="text-xs font-semibold text-tint">Sanitary</span>
+                    <span className="text-xs font-semibold text-tint">{tr('doc.sanitary')}</span>
                   </div>
-                  <div className="text-[11px] text-muted-l mt-0.5">સેનિટરી (Wrapped & Marked)</div>
+                  <div className="text-[11px] text-muted-l mt-0.5">{tr('doc.sanitaryHint')}</div>
                 </div>
                 <div
                   className={`w-4 h-4 rounded-xs border flex items-center justify-center shrink-0 ${
@@ -907,9 +907,9 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 <div>
                   <div className="flex items-center gap-1.5">
                     <div className="w-2.5 h-2.5 rounded-xs bg-red" />
-                    <span className="text-xs font-semibold text-tint">Special Care</span>
+                    <span className="text-xs font-semibold text-tint">{tr('doc.special')}</span>
                   </div>
-                  <div className="text-[11px] text-muted-l mt-0.5">વિશેષ કચરો (Hazard/E-waste)</div>
+                  <div className="text-[11px] text-muted-l mt-0.5">{tr('doc.specialHint')}</div>
                 </div>
                 <div
                   className={`w-4 h-4 rounded-xs border flex items-center justify-center shrink-0 ${
@@ -929,19 +929,19 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 <MapPin size={14} className="text-green shrink-0 mt-0.5" />
                 <div className="min-w-0 flex-1">
                   <div className="text-[10px] font-mono uppercase tracking-wider text-muted-l font-semibold flex items-center gap-1.5">
-                    <span>Handover Location</span>
+                    <span>{tr('doc.location')}</span>
                     {location.accuracyMeters ? (
                       <span className="text-green text-[9px] bg-green/10 border border-green/30 px-1 py-0.2 rounded-xs">
                         ±{location.accuracyMeters}m GPS
                       </span>
                     ) : (
                       <span className="text-tint text-[9px] bg-ink border border-muted/40 px-1 py-0.2 rounded-xs">
-                        {location.source === 'manual_pin' ? 'Map Pin' : location.source === 'manual_search' ? 'Manual' : 'Precise'}
+                        {location.source === 'manual_pin' ? tr('doc.mapPin') : location.source === 'manual_search' ? tr('doc.manual') : tr('doc.precise')}
                       </span>
                     )}
                   </div>
                   <div className="font-mono text-tint text-xs truncate mt-0.5 font-medium">
-                    {isCapturingLocation ? 'Acquiring high-accuracy GPS...' : location.address}
+                    {isCapturingLocation ? tr('doc.gps') : location.address}
                   </div>
                   <div className="text-[10px] font-mono text-muted-l mt-0.5">
                     {location.lat.toFixed(5)}° N, {location.lng.toFixed(5)}° E {location.ward ? `• ${location.ward}` : ''}
@@ -955,18 +955,18 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 title="Edit handover location"
               >
                 <Edit3 size={12} />
-                <span>Edit Map</span>
+                <span>{tr('doc.editMap')}</span>
               </button>
             </div>
             <div className="flex items-center justify-between pt-1.5 border-t border-muted/15 text-[11px]">
-              <span className="text-muted-l">Reward rate:</span>
-              <span className="text-green font-mono font-medium">1 leaf per confirmed stream · 2–4 per handover</span>
+              <span className="text-muted-l">{tr('doc.rewardRate')}</span>
+              <span className="text-green font-mono font-medium">{tr('doc.rewardRateValue')}</span>
             </div>
           </div>
 
           {selectedStreamCount < 2 && (
             <p className="text-[11px] text-amber text-center">
-              Select at least two streams — wet and dry at minimum.
+              {tr('doc.minStreams')}
             </p>
           )}
 
@@ -982,7 +982,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
             }`}
           >
             <Sparkles size={16} />
-            <span>Run AI vision check</span>
+            <span>{tr('doc.run')}</span>
           </button>
         </div>
       )}
@@ -994,11 +994,11 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
         <div className="space-y-4">
           <div className="flex items-center justify-between px-1">
             <div>
-              <h1 className="text-sm font-semibold text-white">AI Vision Verification</h1>
-              <p className="text-xs text-muted-l">AI vision check — photo analysis</p>
+              <h1 className="text-sm font-semibold text-white">{tr('doc.h.verify')}</h1>
+              <p className="text-xs text-muted-l">{tr('doc.h.verifySub')}</p>
             </div>
             <div className="font-mono text-[11px] text-green bg-green/10 px-2 py-0.5 rounded-sm border border-green/30 animate-pulse">
-              ANALYSING
+              {tr('doc.analysing')}
             </div>
           </div>
 
@@ -1012,10 +1012,10 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
             <div className="absolute inset-0 pointer-events-none overflow-hidden">
               <div className="w-full h-1 bg-green shadow-[0_0_12px_#19A85B] animate-[scan_2s_ease-in-out_infinite]" />
               <div className="absolute top-2 left-2 font-mono text-[10px] bg-ink/85 text-green px-2 py-0.5 rounded-sm border border-green/30">
-                AI VISION CHECK // STREAM MATRIX
+                {tr('doc.matrix')}
               </div>
               <div className="absolute bottom-2 right-2 font-mono text-[10px] bg-ink/85 text-tint px-2 py-0.5 rounded-sm border border-muted/40">
-                CHECKING SEGREGATION...
+                {tr('doc.checking')}
               </div>
             </div>
           </div>
@@ -1023,7 +1023,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
           {/* Progress Indicator */}
           <div className="bg-ink-soft border border-muted/30 rounded-lg p-3.5 space-y-2.5">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-l mb-1">
-              Inspection Pipeline
+              {tr('doc.pipeline')}
             </div>
 
             <div className="space-y-2">
@@ -1063,9 +1063,9 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                       {isDone ? (
                         <span className="text-green">OK</span>
                       ) : isCurrent ? (
-                        <span className="text-green animate-pulse">Checking...</span>
+                        <span className="text-green animate-pulse">{tr('doc.stepChecking')}</span>
                       ) : (
-                        <span className="text-muted">Wait</span>
+                        <span className="text-muted">{tr('doc.stepWait')}</span>
                       )}
                     </div>
                   </div>
@@ -1083,11 +1083,11 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
         <div className="space-y-4">
           <div className="flex items-center justify-between px-1">
             <div>
-              <h1 className="text-sm font-semibold text-white">Additional Verification Needed</h1>
-              <p className="text-xs text-muted-l">AI confidence is low due to angle or lighting</p>
+              <h1 className="text-sm font-semibold text-white">{tr('doc.h.more')}</h1>
+              <p className="text-xs text-muted-l">{tr('doc.h.moreSub')}</p>
             </div>
             <div className="font-mono text-[11px] text-amber bg-amber/10 px-2 py-0.5 rounded-sm border border-amber/30">
-              LOW CONFIDENCE
+              {tr('doc.lowConf')}
             </div>
           </div>
 
@@ -1099,7 +1099,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
               className="w-full h-full object-contain opacity-80"
             />
             <div className="absolute top-2 left-2 font-mono text-[10px] bg-amber/90 text-ink px-2 py-0.5 rounded-sm font-bold">
-              AMBIGUOUS VIEW
+              {tr('doc.ambiguous')}
             </div>
           </div>
 
@@ -1109,7 +1109,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
               <AlertTriangle size={20} className="text-amber shrink-0 mt-0.5" />
               <div>
                 <div className="text-xs font-bold text-amber uppercase tracking-wide">
-                  Low-confidence notice
+                  {tr('doc.lowConfNotice')}
                 </div>
                 <p className="text-xs text-zinc-200 mt-1 leading-relaxed">
                   {verificationResult.decisionReason}
@@ -1117,7 +1117,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
               </div>
             </div>
             <p className="text-[11px] text-muted-l border-t border-amber/20 pt-2 leading-relaxed">
-              Your submission has <strong>not failed</strong>. To verify the segregation and calculate your variable Leaf Credits, please record a short video sweep of your bins (as long as you need, up to 10 min — anything over 30 seconds becomes a 30-second time-lapse), or retake a photo.
+              {tr('doc.lowConfBody')}
             </p>
           </div>
 
@@ -1132,7 +1132,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
               className="w-full bg-green hover:bg-[#16934f] text-ink font-semibold text-sm py-3.5 px-4 rounded-md transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-md min-h-[48px]"
             >
               <Video size={18} strokeWidth={2.2} />
-              <span>Record Short Video for Verification</span>
+              <span>{tr('doc.recordVideo')}</span>
             </button>
 
             <button
@@ -1141,7 +1141,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
               className="w-full bg-ink-soft hover:bg-muted/20 border border-muted/30 text-white font-medium text-xs py-3 px-4 rounded-md transition-colors flex items-center justify-center gap-1.5 cursor-pointer min-h-[44px]"
             >
               <Camera size={14} />
-              <span>Retake Photo Instead</span>
+              <span>{tr('doc.retakeInstead')}</span>
             </button>
           </div>
         </div>
@@ -1154,14 +1154,14 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
             <div>
-              <h1 className="text-sm font-semibold text-white">Stage 2: Video Verification</h1>
-              <p className="text-xs text-muted-l">Pan camera across all segregated compartments</p>
+              <h1 className="text-sm font-semibold text-white">{tr('doc.h.video')}</h1>
+              <p className="text-xs text-muted-l">{tr('doc.h.videoSub')}</p>
             </div>
             <button
               onClick={handleRetake}
               className="text-xs text-muted-l hover:text-white px-2 py-1 rounded-sm bg-ink-soft border border-muted/20"
             >
-              Back to Photo
+              {tr('doc.backToPhoto')}
             </button>
           </div>
 
@@ -1186,19 +1186,19 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                         <>
                           <div className="w-2 h-2 rounded-full bg-red animate-ping" />
                           <span className="text-red font-bold">
-                            RECORDING {mmss(recordingSeconds)} / {mmss(MAX_RECORDING_S)}
-                            {recordingSeconds >= REALTIME_LIMIT_S && ' · time-lapse'}
+                            {tr('doc.recording')} {mmss(recordingSeconds)} / {mmss(MAX_RECORDING_S)}
+                            {recordingSeconds >= REALTIME_LIMIT_S && ` · ${tr('doc.timelapse')}`}
                           </span>
                         </>
                       ) : (
                         <>
                           <div className="w-1.5 h-1.5 rounded-full bg-green animate-pulse" />
-                          <span>VIDEO CAMERA ACTIVE</span>
+                          <span>{tr('doc.videoActive')}</span>
                         </>
                       )}
                     </div>
                     <div className="font-mono text-[10px] text-white/80 bg-black/60 px-2 py-0.5 rounded-sm border border-white/20">
-                      STAGE 2
+                      {tr('doc.stage2label')}
                     </div>
                   </div>
 
@@ -1206,16 +1206,16 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                   <div className="relative w-full h-24 flex items-center justify-center">
                     <div className="text-[11px] font-medium text-white/90 bg-black/60 px-3 py-1.5 rounded-md backdrop-blur-xs text-center border border-white/20 shadow-md">
                       {timelapseProgress !== null
-                        ? `Making your 30-second time-lapse… ${Math.round(timelapseProgress * 100)}%`
+                        ? tr('doc.making', { pct: Math.round(timelapseProgress * 100) })
                         : isRecording
-                        ? 'Slowly pan over each bin, lids open…'
-                        : 'Record as long as you need, up to 10 min. Anything over 30 seconds is sped up to a 30-second time-lapse.'}
+                        ? tr('doc.pan')
+                        : tr('doc.lengthRule')}
                     </div>
                   </div>
 
                   <div className="flex items-center justify-between font-mono text-[10px] text-white/70 bg-black/60 px-2 py-1 rounded-sm border border-white/10 backdrop-blur-xs">
-                    <span>4-STREAM MOTION SWEEP</span>
-                    <span className="text-green">READY</span>
+                    <span>{tr('doc.sweep')}</span>
+                    <span className="text-green">{tr('doc.ready')}</span>
                   </div>
                 </div>
               </>
@@ -1241,7 +1241,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 )}
 
                 <div className="absolute top-2 left-2 font-mono text-[10px] bg-green text-ink font-bold px-2 py-0.5 rounded-sm">
-                  VIDEO RECORDED (4s)
+                  {tr('doc.recorded')}
                 </div>
 
                 {recordedVideoBlob && (
@@ -1274,7 +1274,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 type="button"
                 onClick={toggleFacingMode}
                 disabled={isRecording}
-                aria-label="Switch camera"
+                aria-label={tr('doc.switchCamera')}
                 className="p-2.5 rounded-full bg-ink hover:bg-muted/20 border border-muted/30 text-tint transition-colors cursor-pointer disabled:opacity-40"
               >
                 <FlipHorizontal size={18} />
@@ -1285,7 +1285,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 <button
                   type="button"
                   onClick={startVideoRecording}
-                  aria-label="Start recording"
+                  aria-label={tr('doc.startRec')}
                   className="w-16 h-16 rounded-full border-4 border-red/80 flex items-center justify-center bg-red/20 active:scale-90 transition-transform cursor-pointer shadow-lg hover:border-red group"
                 >
                   <div className="w-11 h-11 rounded-full bg-red group-hover:scale-95 transition-transform flex items-center justify-center text-white">
@@ -1296,7 +1296,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 <button
                   type="button"
                   onClick={stopVideoRecording}
-                  aria-label="Stop recording"
+                  aria-label={tr('doc.stopRec')}
                   className="w-16 h-16 rounded-full border-4 border-red flex items-center justify-center bg-red/30 active:scale-90 transition-transform cursor-pointer shadow-lg animate-pulse"
                 >
                   <div className="w-6 h-6 rounded-xs bg-red" />
@@ -1315,7 +1315,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 className="w-full bg-green hover:bg-[#16934f] text-ink font-semibold text-sm py-3.5 px-4 rounded-md transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-md min-h-[48px]"
               >
                 <Sparkles size={18} />
-                <span>Submit video for AI verification</span>
+                <span>{tr('doc.submitVideo')}</span>
               </button>
 
               <button
@@ -1329,7 +1329,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 className="w-full bg-ink-soft hover:bg-muted/20 border border-muted/30 text-white font-medium text-xs py-2.5 px-4 rounded-md transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <RotateCcw size={13} />
-                <span>Re-record Video</span>
+                <span>{tr('doc.rerecord')}</span>
               </button>
             </div>
           )}
@@ -1343,11 +1343,11 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
         <div className="space-y-4">
           <div className="flex items-center justify-between px-1">
             <div>
-              <h1 className="text-sm font-semibold text-white">Video Multi-Angle Verification</h1>
-              <p className="text-xs text-muted-l">AI vision check — video analysis</p>
+              <h1 className="text-sm font-semibold text-white">{tr('doc.h.videoCheck')}</h1>
+              <p className="text-xs text-muted-l">{tr('doc.h.videoCheckSub')}</p>
             </div>
             <div className="font-mono text-[11px] text-green bg-green/10 px-2 py-0.5 rounded-sm border border-green/30 animate-pulse">
-              ANALYSING VIDEO
+              {tr('doc.analysingVideo')}
             </div>
           </div>
 
@@ -1372,10 +1372,10 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
             <div className="absolute inset-0 pointer-events-none overflow-hidden">
               <div className="w-full h-1 bg-green shadow-[0_0_12px_#19A85B] animate-[scan_1.5s_ease-in-out_infinite]" />
               <div className="absolute top-2 left-2 font-mono text-[10px] bg-ink/85 text-green px-2 py-0.5 rounded-sm border border-green/30">
-                AI VISION CHECK // VIDEO
+                {tr('doc.matrixVideo')}
               </div>
               <div className="absolute bottom-2 right-2 font-mono text-[10px] bg-ink/85 text-tint px-2 py-0.5 rounded-sm border border-muted/40">
-                CALCULATING REWARDS...
+                {tr('doc.calculating')}
               </div>
             </div>
           </div>
@@ -1383,7 +1383,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
           {/* Progress stages */}
           <div className="bg-ink-soft border border-muted/30 rounded-lg p-3.5 space-y-2.5">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-l mb-1">
-              Video Analysis Pipeline
+              {tr('doc.videoPipeline')}
             </div>
 
             <div className="space-y-2">
@@ -1423,9 +1423,9 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                       {isDone ? (
                         <span className="text-green">OK</span>
                       ) : isCurrent ? (
-                        <span className="text-green animate-pulse">Evaluating...</span>
+                        <span className="text-green animate-pulse">{tr('doc.stepEvaluating')}</span>
                       ) : (
-                        <span className="text-muted">Wait</span>
+                        <span className="text-muted">{tr('doc.stepWait')}</span>
                       )}
                     </div>
                   </div>
@@ -1443,11 +1443,11 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
         <div className="space-y-4">
           <div className="flex items-center justify-between px-1">
             <div>
-              <h1 className="text-sm font-semibold text-white">Saved for upload</h1>
-              <p className="text-xs text-muted-l">No connection right now — nothing lost</p>
+              <h1 className="text-sm font-semibold text-white">{tr('doc.h.saved')}</h1>
+              <p className="text-xs text-muted-l">{tr('doc.h.savedSub')}</p>
             </div>
             <div className="font-mono text-[11px] text-amber bg-amber/10 px-2 py-0.5 rounded-sm border border-amber/30">
-              QUEUED
+              {tr('doc.queued')}
             </div>
           </div>
 
@@ -1466,13 +1466,11 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
             <div className="flex items-center gap-2">
               <CloudOff size={20} className="text-amber shrink-0" />
               <span className="text-sm font-bold uppercase tracking-wide text-amber">
-                Handover queued
+                {tr('doc.queuedTitle')}
               </span>
             </div>
             <p className="text-xs leading-relaxed text-muted-l">
-              Your photo and the streams you declared are stored on this device. SafaiSeva
-              will send this handover for verification automatically as soon as you’re back
-              online — you don’t need to re-capture anything.
+              {tr('doc.queuedBody')}
             </p>
           </div>
 
@@ -1483,7 +1481,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
               className="w-full bg-green hover:bg-[#16934f] text-ink font-semibold text-sm py-3.5 px-4 rounded-md transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs min-h-[48px]"
             >
               <UploadCloud size={16} />
-              <span>Done — back to Wallet</span>
+              <span>{tr('doc.backWallet')}</span>
             </button>
             <button
               type="button"
@@ -1491,7 +1489,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
               className="w-full bg-ink-soft hover:bg-muted/20 border border-muted/30 text-muted-l hover:text-white font-medium text-xs py-2.5 px-4 rounded-md transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <Camera size={13} />
-              <span>Document another handover</span>
+              <span>{tr('doc.another')}</span>
             </button>
           </div>
         </div>
@@ -1504,15 +1502,15 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
         <div className="space-y-4">
           <div className="flex items-center justify-between px-1">
             <div>
-              <h1 className="text-sm font-semibold text-white">Verification Status</h1>
+              <h1 className="text-sm font-semibold text-white">{tr('doc.h.status')}</h1>
               <p className="text-xs text-muted-l">
                 {verificationResult.mediaType === 'video'
-                  ? 'Video sweep evaluation complete'
-                  : 'AI photo analysis evaluation complete'}
+                  ? tr('doc.videoDone')
+                  : tr('doc.photoDone')}
               </p>
             </div>
             <div className="font-mono text-[11px] text-muted-l bg-ink-soft px-2 py-0.5 rounded-sm border border-muted/20">
-              COMPLETE
+              {tr('doc.complete')}
             </div>
           </div>
 
@@ -1553,17 +1551,17 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                     }`}
                   >
                     {isApproved
-                      ? `Segregation Verified +${verificationResult.creditsAwarded} Leaf Credits`
-                      : 'Verification Failed'}
+                      ? tr('doc.verifiedPlus', { n: verificationResult.creditsAwarded })
+                    : tr('doc.failed')}
                   </span>
                   <span className="text-[10px] text-muted-l font-mono">
                     {isApproved
                       ? verificationResult.mediaType === 'video'
-                        ? 'Verified via multi-angle video sweep'
-                        : 'Verified via photo analysis'
+                        ? tr('doc.viaVideo')
+                      : tr('doc.viaPhoto')
                       : verificationResult.mediaType === 'video'
-                      ? 'Video analysis'
-                      : 'Photo analysis'}
+                      ? tr('doc.videoAnalysis')
+                    : tr('doc.photoAnalysis')}
                   </span>
                 </div>
               </div>
@@ -1595,10 +1593,10 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
             {/* Updated Balance Display */}
             {isApproved && (
               <div className="pt-2 border-t border-green/20 flex items-center justify-between text-xs text-tint">
-                <span>Updated Wallet Balance:</span>
+                <span>{tr('doc.updatedBalance')}</span>
                 <span className="font-mono font-bold text-white tabular-nums flex items-center gap-1">
                   <LeafGlyph size={13} color="#19A85B" />
-                  <span>{displayedBalance} leaves</span>
+                  <span>{tr('doc.leaves', { n: displayedBalance })}</span>
                 </span>
               </div>
             )}
@@ -1607,13 +1605,13 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
           {/* Itemised Readout Table */}
           <div className="bg-ink-soft border border-muted/30 rounded-lg p-3.5 space-y-2 text-left">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-l mb-1">
-              Itemised Stream Readout
+              {tr('doc.readout')}
             </div>
 
             <div className="divide-y divide-muted/15 text-xs">
               {/* Wet */}
               <div className="py-1.5 flex items-center justify-between">
-                <span className="font-medium text-white w-24">Wet (લીલો)</span>
+                <span className="font-medium text-white w-24">{tr('doc.wetShort')}</span>
                 <span className="text-muted-l flex-1 text-[11px] truncate px-2">
                   {verificationResult.streams.wet.note}
                 </span>
@@ -1636,7 +1634,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
 
               {/* Dry */}
               <div className="py-1.5 flex items-center justify-between">
-                <span className="font-medium text-white w-24">Dry (સૂકો)</span>
+                <span className="font-medium text-white w-24">{tr('doc.dryShort')}</span>
                 <span className="text-muted-l flex-1 text-[11px] truncate px-2">
                   {verificationResult.streams.dry.note}
                 </span>
@@ -1659,7 +1657,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
 
               {/* Sanitary */}
               <div className="py-1.5 flex items-center justify-between">
-                <span className="font-medium text-white w-24">Sanitary</span>
+                <span className="font-medium text-white w-24">{tr('doc.sanitary')}</span>
                 <span className="text-muted-l flex-1 text-[11px] truncate px-2">
                   {verificationResult.streams.sanitary.note}
                 </span>
@@ -1682,7 +1680,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
 
               {/* Special Care */}
               <div className="py-1.5 flex items-center justify-between">
-                <span className="font-medium text-white w-24">Special Care</span>
+                <span className="font-medium text-white w-24">{tr('doc.special')}</span>
                 <span className="text-muted-l flex-1 text-[11px] truncate px-2">
                   {verificationResult.streams.special_care.note}
                 </span>
@@ -1714,14 +1712,14 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                 className="w-full bg-green hover:bg-[#16934f] text-ink font-semibold text-sm py-3.5 px-4 rounded-md transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs min-h-[48px]"
               >
                 <Camera size={16} />
-                <span>Retry with New Photo</span>
+                <span>{tr('doc.retryPhoto')}</span>
               </button>
               <button
                 type="button"
                 onClick={onCancel}
                 className="w-full bg-ink-soft hover:bg-muted/20 border border-muted/30 text-muted-l hover:text-white font-medium text-xs py-2.5 px-4 rounded-md transition-colors flex items-center justify-center cursor-pointer"
               >
-                Cancel
+                {tr('doc.cancel')}
               </button>
             </div>
           ) : (
@@ -1730,7 +1728,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
               onClick={onCancel}
               className="w-full bg-ink-soft hover:bg-muted/20 border border-muted/40 text-white font-semibold text-xs py-3.5 px-4 rounded-md transition-colors flex items-center justify-center gap-1.5 min-h-[44px] cursor-pointer"
             >
-              <span>Return to Wallet Activity</span>
+              <span>{tr('doc.returnWallet')}</span>
               <ArrowRight size={14} />
             </button>
           )}

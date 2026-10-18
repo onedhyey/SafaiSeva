@@ -3,6 +3,7 @@ import { X, MapPin, Clock, ShieldCheck, Check, AlertTriangle, Flag } from 'lucid
 import { HandoverRecord } from '../types';
 import { LeafGlyph } from './LeafGlyph';
 import { disputeHandover } from '../lib/api';
+import { useI18n } from '../lib/i18n';
 
 interface HandoverDetailModalProps {
   handover: HandoverRecord | null;
@@ -17,6 +18,7 @@ export const HandoverDetailModal: React.FC<HandoverDetailModalProps> = ({
   onClose,
   onDisputed,
 }) => {
+  const { t: tr } = useI18n();
   const [disputeState, setDisputeState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle');
   const [disputeMsg, setDisputeMsg] = useState('');
 
@@ -87,7 +89,7 @@ export const HandoverDetailModal: React.FC<HandoverDetailModalProps> = ({
         {/* Verification Summary */}
         <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800 space-y-2 text-xs">
           <div className="flex items-center justify-between">
-            <span className="text-zinc-400 font-mono">Decision Rationale</span>
+            <span className="text-zinc-400 font-mono">{tr('hd.rationale')}</span>
             <div className="inline-flex items-center gap-1 font-mono font-bold text-white">
               <LeafGlyph size={13} color="#10b981" />
               <span>{handover.creditsAwarded} Credits</span>
@@ -99,27 +101,27 @@ export const HandoverDetailModal: React.FC<HandoverDetailModalProps> = ({
         {/* Itemised Breakdown */}
         <div className="space-y-1.5 pt-3">
           <div className="text-[11px] font-mono uppercase text-zinc-400 tracking-wider">
-            Stream Analysis Readout
+            {tr('hd.readout')}
           </div>
           <div className="bg-zinc-950 p-2.5 rounded-lg border border-zinc-800 divide-y divide-zinc-800/80 text-xs font-mono">
             <div className="py-1 flex justify-between">
-              <span className="text-zinc-200">Wet Organic:</span>
+              <span className="text-zinc-200">{tr('hd.wet')}</span>
               <span className={handover.verification.streams.wet.verdict === 'clean' ? 'text-emerald-400' : 'text-red-400'}>
                 {handover.verification.streams.wet.note}
               </span>
             </div>
             <div className="py-1 flex justify-between">
-              <span className="text-zinc-200">Dry Recyclable:</span>
+              <span className="text-zinc-200">{tr('hd.dry')}</span>
               <span className={handover.verification.streams.dry.verdict === 'clean' ? 'text-emerald-400' : 'text-red-400'}>
                 {handover.verification.streams.dry.note}
               </span>
             </div>
             <div className="py-1 flex justify-between">
-              <span className="text-zinc-200">Sanitary:</span>
+              <span className="text-zinc-200">{tr('hd.sanitary')}</span>
               <span className="text-zinc-400">{handover.verification.streams.sanitary.note}</span>
             </div>
             <div className="py-1 flex justify-between">
-              <span className="text-zinc-200">Special Care:</span>
+              <span className="text-zinc-200">{tr('hd.special')}</span>
               <span className="text-zinc-400">{handover.verification.streams.special_care.note}</span>
             </div>
           </div>
@@ -128,20 +130,20 @@ export const HandoverDetailModal: React.FC<HandoverDetailModalProps> = ({
         {/* Full Audit Metadata */}
         <div className="space-y-1.5 pt-3 border-t border-zinc-800 text-[11px] font-mono text-zinc-400">
           <div className="flex justify-between">
-            <span>Timestamp:</span>
+            <span>{tr('hd.time')}</span>
             <span className="text-zinc-200">{new Date(handover.timestamp).toLocaleString('en-IN')}</span>
           </div>
           <div className="flex justify-between">
-            <span>Image Hash:</span>
+            <span>{tr('hd.hash')}</span>
             <span className="text-zinc-200 truncate max-w-[180px]">{handover.imageHash}</span>
           </div>
           <div className="flex justify-between">
-            <span>Source Engine:</span>
-            <span className="text-zinc-200">{handover.source === 'manual_worker' ? 'Doorstep Worker' : 'AMC AI Vision'}</span>
+            <span>{tr('hd.engine')}</span>
+            <span className="text-zinc-200">{handover.source === 'manual_worker' ? tr('hd.doorstep') : tr('hd.ai')}</span>
           </div>
           {handover.reviewedBy && (
             <div className="flex justify-between text-amber-400">
-              <span>Reviewed By:</span>
+              <span>{tr('hd.reviewedBy')}</span>
               <span className="truncate max-w-[180px]">{handover.reviewedBy}</span>
             </div>
           )}
@@ -153,13 +155,13 @@ export const HandoverDetailModal: React.FC<HandoverDetailModalProps> = ({
             {disputeState === 'done' ? (
               <div className="text-[11px] text-emerald-400 flex items-center gap-1.5">
                 <Check size={13} />
-                <span>Sent for a karmachari to check. You’ll see the result in your history.</span>
+                <span>{tr('hd.sent')}</span>
               </div>
             ) : (
               <>
                 <label className="text-[11px] font-semibold text-white flex items-center gap-1.5">
                   <Flag size={12} className="text-amber-400" />
-                  <span>Think this is wrong? Ask for a review</span>
+                  <span>{tr('hd.wrong')}</span>
                 </label>
                 <textarea
                   rows={2}
@@ -169,14 +171,14 @@ export const HandoverDetailModal: React.FC<HandoverDetailModalProps> = ({
                   className="mt-1.5 w-full bg-zinc-950 border border-zinc-700/80 rounded-lg p-2 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:border-amber-500"
                 />
                 {disputeState === 'error' && (
-                  <div className="text-[11px] text-red-400 mt-1">Couldn’t send. Try again.</div>
+                  <div className="text-[11px] text-red-400 mt-1">{tr('hd.failedSend')}</div>
                 )}
                 <button
                   onClick={submitDispute}
                   disabled={disputeState === 'sending'}
                   className="mt-2 w-full bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-semibold py-2 rounded-lg transition-colors"
                 >
-                  {disputeState === 'sending' ? 'Sending…' : 'Request a review'}
+                  {disputeState === 'sending' ? tr('hd.sending') : tr('hd.request')}
                 </button>
               </>
             )}

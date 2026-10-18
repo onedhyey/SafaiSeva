@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Check, Trash2, Sparkles } from 'lucide-react';
 import { LeafGlyph } from '../LeafGlyph';
 import { setBinCount, SetBinsResponse, BinsInfo } from '../../lib/api';
+import { useI18n } from '../../lib/i18n';
 
 interface BinSetupModalProps {
   isOpen: boolean;
@@ -27,6 +28,7 @@ export const BinSetupModal: React.FC<BinSetupModalProps> = ({
   onClose,
   onSaved,
 }) => {
+  const { t: tr } = useI18n();
   const [choice, setChoice] = useState<number>(bins.count || 1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,9 +72,9 @@ export const BinSetupModal: React.FC<BinSetupModalProps> = ({
             </div>
             <div>
               <h2 className="text-sm font-bold text-white">
-                {onboarding ? 'Set up your bins' : 'Update your bins'}
+                {onboarding ? tr('bins.setup') : tr('bins.update')}
               </h2>
-              <p className="text-[11px] text-zinc-400">Separating waste starts at home</p>
+              <p className="text-[11px] text-zinc-400">{tr('bins.lead')}</p>
             </div>
           </div>
           {!onboarding && (
@@ -87,8 +89,7 @@ export const BinSetupModal: React.FC<BinSetupModalProps> = ({
         </div>
 
         <p className="text-xs text-zinc-300 leading-relaxed mb-3">
-          How many separate bins do you keep at home right now? Reaching 2, then 4, then 6
-          bins earns you leaf credits before you even do a handover.
+          {tr('bins.howMany')}
         </p>
 
         <div className="space-y-2">
@@ -144,8 +145,7 @@ export const BinSetupModal: React.FC<BinSetupModalProps> = ({
 
         {choice < 2 && (
           <p className="mt-3 text-[11px] text-zinc-400 leading-relaxed">
-            You can start with just two — a wet bin and a dry bin — and come back here when
-            you add more.
+            {tr('bins.start')}
           </p>
         )}
 
@@ -157,7 +157,7 @@ export const BinSetupModal: React.FC<BinSetupModalProps> = ({
               onClick={onClose}
               className="w-1/3 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-xs font-semibold text-zinc-300 py-2.5 rounded-lg transition-colors"
             >
-              Cancel
+              {tr('common.cancel')}
             </button>
           )}
           <button
@@ -165,7 +165,7 @@ export const BinSetupModal: React.FC<BinSetupModalProps> = ({
             disabled={saving}
             className={`${onboarding ? 'w-full' : 'w-2/3'} bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black text-xs font-bold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1.5`}
           >
-            {saving ? 'Saving…' : onboarding ? 'Save and continue' : 'Save'}
+            {saving ? tr('common.saving') : onboarding ? tr('bins.saveContinue') : tr('common.save')}
           </button>
         </div>
       </div>

@@ -3,6 +3,7 @@ import { X, CheckCircle, Clock } from 'lucide-react';
 import { TicketRecord } from '../types';
 import { QRCodeSvg } from './QRCodeSvg';
 import { LeafGlyph } from './LeafGlyph';
+import { useI18n } from '../lib/i18n';
 
 interface TicketModalProps {
   ticket: TicketRecord | null;
@@ -17,6 +18,7 @@ export const TicketModal: React.FC<TicketModalProps> = ({
   onClose,
   onMarkUsed,
 }) => {
+  const { t: tr } = useI18n();
   const [timeLeft, setTimeLeft] = useState<string>('04:18:22');
 
   useEffect(() => {
@@ -70,7 +72,7 @@ export const TicketModal: React.FC<TicketModalProps> = ({
             {ticket.id}
           </div>
           <div className="text-[11px] text-zinc-600 mt-0.5 font-medium">
-            Scan at Janmarg BRTS automated turnstile
+            {tr('ticket.scan')}
           </div>
         </div>
 
@@ -79,7 +81,7 @@ export const TicketModal: React.FC<TicketModalProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-zinc-400 flex items-center gap-1">
               <Clock size={13} className="text-emerald-400" />
-              Validity remaining
+              {tr('ticket.validity')}
             </span>
             <span className="font-mono font-bold text-emerald-400 text-sm tracking-wide">
               {timeLeft}
@@ -87,7 +89,7 @@ export const TicketModal: React.FC<TicketModalProps> = ({
           </div>
 
           <div className="flex items-center justify-between">
-            <span className="text-zinc-400">Redemption Cost</span>
+            <span className="text-zinc-400">{tr('ticket.cost')}</span>
             <span className="inline-flex items-center gap-1 font-mono font-semibold text-white">
               <LeafGlyph size={13} color="#10b981" />
               <span>{ticket.creditsSpent} credits</span>
@@ -95,7 +97,7 @@ export const TicketModal: React.FC<TicketModalProps> = ({
           </div>
 
           <div className="flex items-center justify-between">
-            <span className="text-zinc-400">Status</span>
+            <span className="text-zinc-400">{tr('ticket.status')}</span>
             <span
               className={`font-semibold uppercase tracking-wider text-[10px] font-mono px-2 py-0.5 rounded-sm border ${
                 ticket.status === 'active'
@@ -118,7 +120,7 @@ export const TicketModal: React.FC<TicketModalProps> = ({
             className="mt-4 w-full bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-1.5 transition-colors shadow-sm"
           >
             <CheckCircle size={14} />
-            <span>Mark as Scanned / Boarded</span>
+            <span>{tr('ticket.markUsed')}</span>
           </button>
         )}
       </div>

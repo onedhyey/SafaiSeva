@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { WardStats, HandoverRecord } from '../../types';
 import { LeafGlyph } from '../LeafGlyph';
 import { HouseholdReviewPanel } from './HouseholdReviewPanel';
+import { useI18n } from '../../lib/i18n';
 import {
   ShieldAlert,
   Building2,
@@ -23,6 +24,7 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
   wardStats,
   handovers,
 }) => {
+  const { t: tr } = useI18n();
   const [activeTab, setActiveTab] = useState<'overview' | 'anomalies' | 'audit' | 'districts'>('overview');
   const [reviewing, setReviewing] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -44,18 +46,18 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
               AMC Solid Waste Directorate — {wardStats.wardName}
             </div>
             <div className="font-mono text-[10px] text-muted-l mt-0.5">
-              Supervisory Control & Verification Audit Dashboard
+              {tr('o.title')}
             </div>
           </div>
           <div className="font-mono text-[11px] bg-ink px-2 py-0.5 rounded-xs border border-muted/30 text-tint">
-            Live Stream
+            {tr('o.live')}
           </div>
         </div>
 
         {/* 4 Sober Administrative KPIs */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2.5">
           <div className="bg-ink p-2.5 rounded-xs border border-muted/20">
-            <div className="text-[10px] font-mono text-muted-l uppercase">Participation</div>
+            <div className="text-[10px] font-mono text-muted-l uppercase">{tr('o.participation')}</div>
             <div className="font-mono text-lg font-bold text-white tabular-nums">
               {wardStats.participationRateThisWeek}%
             </div>
@@ -66,7 +68,7 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
           </div>
 
           <div className="bg-ink p-2.5 rounded-xs border border-muted/20">
-            <div className="text-[10px] font-mono text-muted-l uppercase">Credits Issued</div>
+            <div className="text-[10px] font-mono text-muted-l uppercase">{tr('o.credits')}</div>
             <div className="font-mono text-lg font-bold text-white tabular-nums flex items-center gap-1">
               <LeafGlyph size={14} color="#19A85B" />
               <span>{wardStats.creditsIssued.toLocaleString()}</span>
@@ -77,19 +79,19 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
           </div>
 
           <div className="bg-ink p-2.5 rounded-xs border border-muted/20">
-            <div className="text-[10px] font-mono text-muted-l uppercase">AI Direct Pass</div>
+            <div className="text-[10px] font-mono text-muted-l uppercase">{tr('o.aiPass')}</div>
             <div className="font-mono text-lg font-bold text-green tabular-nums">
               {wardStats.aiSplit.approved}%
             </div>
-            <div className="text-[10px] font-mono text-muted-l">Zero worker latency</div>
+            <div className="text-[10px] font-mono text-muted-l">{tr('o.zeroLatency')}</div>
           </div>
 
           <div className="bg-ink p-2.5 rounded-xs border border-muted/20">
-            <div className="text-[10px] font-mono text-muted-l uppercase">Active Anomalies</div>
+            <div className="text-[10px] font-mono text-muted-l uppercase">{tr('o.anomalies')}</div>
             <div className="font-mono text-lg font-bold text-amber tabular-nums">
               {wardStats.anomalies.length}
             </div>
-            <div className="text-[10px] font-mono text-amber">Spot-checks flagged</div>
+            <div className="text-[10px] font-mono text-amber">{tr('o.spot')}</div>
           </div>
         </div>
       </div>
@@ -104,7 +106,7 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
               : 'text-muted-l hover:text-white'
           }`}
         >
-          Overview & Split
+          {tr('o.tabOverview')}
         </button>
         <button
           onClick={() => setActiveTab('anomalies')}
@@ -114,7 +116,7 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
               : 'text-muted-l hover:text-white'
           }`}
         >
-          <span>Anomalies</span>
+          <span>{tr('o.tabAnomalies')}</span>
           <span className="w-1.5 h-1.5 rounded-full bg-amber" />
         </button>
         <button
@@ -125,7 +127,7 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
               : 'text-muted-l hover:text-white'
           }`}
         >
-          Worker Audit
+          {tr('o.tabAudit')}
         </button>
         <button
           onClick={() => setActiveTab('districts')}
@@ -135,7 +137,7 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
               : 'text-muted-l hover:text-white'
           }`}
         >
-          Sub-Districts
+          {tr('o.tabDistricts')}
         </button>
       </div>
 
@@ -146,9 +148,9 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
           <div className="bg-ink-soft border border-muted/30 rounded-md p-3.5 space-y-2.5">
             <div className="flex items-center justify-between text-xs">
               <span className="font-bold text-white uppercase font-mono tracking-wide">
-                Weekly AI Verification Pipeline Split
+                {tr('o.split')}
               </span>
-              <span className="text-[11px] font-mono text-muted-l">3,680 Handover Records</span>
+              
             </div>
 
             {/* Split Distribution Bar */}
@@ -175,34 +177,34 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
               <div className="bg-ink p-2 rounded-xs border border-muted/20">
                 <div className="flex items-center gap-1 text-green text-[11px]">
                   <span className="w-2 h-2 rounded-full bg-green" />
-                  <span>Approved</span>
+                  <span>{tr('o.approved')}</span>
                 </div>
                 <div className="text-sm font-bold text-white mt-0.5 tabular-nums">
                   {wardStats.aiSplit.approved}%
                 </div>
-                <div className="text-[10px] text-muted-l">Direct auto-credit</div>
+                <div className="text-[10px] text-muted-l">{tr('o.approvedSub')}</div>
               </div>
 
               <div className="bg-ink p-2 rounded-xs border border-muted/20">
                 <div className="flex items-center gap-1 text-amber text-[11px]">
                   <span className="w-2 h-2 rounded-full bg-amber" />
-                  <span>In Review</span>
+                  <span>{tr('o.inReview')}</span>
                 </div>
                 <div className="text-sm font-bold text-white mt-0.5 tabular-nums">
                   {wardStats.aiSplit.inReview}%
                 </div>
-                <div className="text-[10px] text-muted-l">Worker spot-check</div>
+                <div className="text-[10px] text-muted-l">{tr('o.inReviewSub')}</div>
               </div>
 
               <div className="bg-ink p-2 rounded-xs border border-muted/20">
                 <div className="flex items-center gap-1 text-red text-[11px]">
                   <span className="w-2 h-2 rounded-full bg-red" />
-                  <span>Rejected</span>
+                  <span>{tr('o.rejected')}</span>
                 </div>
                 <div className="text-sm font-bold text-white mt-0.5 tabular-nums">
                   {wardStats.aiSplit.rejected}%
                 </div>
-                <div className="text-[10px] text-muted-l">Contamination flag</div>
+                <div className="text-[10px] text-muted-l">{tr('o.rejectedSub')}</div>
               </div>
             </div>
           </div>
@@ -210,7 +212,7 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
           {/* Audit Trail Log Summary */}
           <div className="bg-ink-soft border border-muted/30 rounded-md p-3.5 space-y-2">
             <div className="text-xs font-bold text-white uppercase font-mono tracking-wide">
-              Recent Verification Audit Trail
+              {tr('o.trail')}
             </div>
 
             <div className="divide-y divide-muted/15 text-xs font-mono">
@@ -227,7 +229,7 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
                       </span>
                     </div>
                     <div className="text-[10px] text-muted">
-                      {h.source === 'manual_worker' ? 'Worker Direct' : 'Edge AI'} · #
+                      {h.source === 'manual_worker' ? tr('o.workerDirect') : tr('o.edgeAi')} · #
                       {String(h.id).replace(/-/g, '').slice(0, 8)}
                     </div>
                   </div>
@@ -260,7 +262,7 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
             <div className="text-xs font-bold uppercase tracking-wider text-white font-mono">
-              Algorithmic Anomaly Flags
+              {tr('o.flags')}
             </div>
             <span className="text-[10px] font-mono text-amber">
               {wardStats.anomalies.length} Flagged Households
@@ -294,7 +296,7 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
 
                 <div className="bg-ink p-2 rounded-xs border border-muted/20 text-xs text-tint leading-relaxed">
                   <span className="font-mono text-[10px] text-amber uppercase font-semibold block mb-0.5">
-                    Flag Rationale:
+                    {tr('o.rationale')}
                   </span>
                   {anom.flagReason}
                 </div>
@@ -306,7 +308,7 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
                     onClick={() => setReviewing(anom.householdId)}
                     className="bg-ink hover:bg-muted/20 border border-muted/40 text-tint px-2.5 rounded-xs text-[10px] font-bold min-h-[36px] cursor-pointer"
                   >
-                    Review household
+                    {tr('o.review')}
                   </button>
                 </div>
               </div>
@@ -320,20 +322,20 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
             <div className="text-xs font-bold uppercase tracking-wider text-white font-mono">
-              Worker Exception Override Audit
+              {tr('o.auditTitle')}
             </div>
-            <span className="text-[10px] font-mono text-muted-l">Threshold: 40% – 95%</span>
+            <span className="text-[10px] font-mono text-muted-l">{tr('o.threshold')}</span>
           </div>
 
           <div className="bg-ink-soft border border-muted/30 rounded-md overflow-hidden">
             <table className="w-full text-left text-xs font-mono">
               <thead className="bg-ink text-muted-l border-b border-muted/30 text-[10px] uppercase">
                 <tr>
-                  <th className="p-2.5">Karmachari</th>
-                  <th className="p-2.5">Route</th>
-                  <th className="p-2.5 text-right">Reviews</th>
-                  <th className="p-2.5 text-right">Override %</th>
-                  <th className="p-2.5 text-right">Status</th>
+                  <th className="p-2.5">{tr('o.colKarmachari')}</th>
+                  <th className="p-2.5">{tr('o.colRoute')}</th>
+                  <th className="p-2.5 text-right">{tr('o.colReviews')}</th>
+                  <th className="p-2.5 text-right">{tr('o.colOverride')}</th>
+                  <th className="p-2.5 text-right">{tr('ticket.status')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-muted/20 text-tint">
@@ -356,10 +358,10 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
                     <td className="p-2.5 text-right">
                       {k.flagged ? (
                         <span className="inline-block px-1.5 py-0.5 bg-amber/20 text-amber text-[9px] font-bold rounded-xs">
-                          FLAGGED
+                          {tr('o.flagged')}
                         </span>
                       ) : (
-                        <span className="text-green text-[9px] font-semibold">NORMAL</span>
+                        <span className="text-green text-[9px] font-semibold">{tr('o.normal')}</span>
                       )}
                     </td>
                   </tr>
@@ -369,7 +371,7 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
           </div>
 
           <p className="text-[10px] text-muted-l leading-relaxed px-1">
-            Workers with override rates &gt;95% or &lt;40% are automatically flagged to detect rubber-stamping or arbitrary rejection patterns.
+            {tr('o.auditNote')}
           </p>
         </div>
       )}
@@ -379,9 +381,9 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
             <div className="text-xs font-bold uppercase tracking-wider text-white font-mono">
-              Navrangpura Sub-District Segregation
+              {tr('o.areas')}
             </div>
-            <span className="text-[10px] font-mono text-muted-l">5 Micro-Pockets</span>
+            <span className="text-[10px] font-mono text-muted-l">{wardStats.subDistricts.length}</span>
           </div>
 
           <div className="space-y-2">
@@ -416,7 +418,7 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
                 </div>
 
                 <div className="flex items-center justify-between text-[10px] font-mono text-muted-l">
-                  <span>Target: 75%</span>
+                  <span>{tr('o.target')}</span>
                   <span
                     className={`uppercase font-semibold ${
                       dist.status === 'optimal'
@@ -427,10 +429,10 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
                     }`}
                   >
                     {dist.status === 'optimal'
-                      ? 'Optimal Coverage'
+                      ? tr('o.optimal')
                       : dist.status === 'attention'
-                      ? 'Action Required'
-                      : 'Low Segregation'}
+                      ? tr('o.action')
+                      : tr('o.low')}
                   </span>
                 </div>
               </div>
