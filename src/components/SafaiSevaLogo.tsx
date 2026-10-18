@@ -118,7 +118,7 @@ export const SafaiSevaLogo: React.FC<SafaiSevaLogoProps> = ({
             SafaiSeva
           </span>
           <span className="text-[9px] font-mono text-emerald-400 font-semibold tracking-tight">
-            AMC CIVIC EDGE
+            AHMEDABAD
           </span>
         </div>
       </div>

@@ -155,11 +155,6 @@ export default function App() {
   // leaderboard are all backend-served now; `src/lib/seed.ts` is only the offline
   // fallback each of those falls back to if its API call fails.
   const loadData = useCallback(async () => {
-    // Signed-in builds: nothing to load until there is a session (it reruns on sign-in).
-    if (authEnabled && !isSignedIn) {
-      setLoading(false);
-      return;
-    }
     try {
       const [hh, hnds, tkts, karm, ward, sett] = await Promise.all([
         getHouseholdProfile(),
@@ -169,6 +164,18 @@ export default function App() {
         getWardStats(),
         getDemoSettings(),
       ]);
+
+      // Signed-in builds without a session yet: set up the (empty) local structure the
+      // screens need and make no API calls — loadData reruns once sign-in completes.
+      if (authEnabled && !isSignedIn) {
+        setHousehold({ ...hh, balance: 0 });
+        setHandovers([]);
+        setTickets([]);
+        setKarmachari(karm);
+        setWardStats({ ...ward, leaderboard: [], anomalies: [] });
+        setSettings(sett);
+        return;
+      }
 
       // Demo builds start from the local seed; signed-in builds start empty and only ever
       // show what the server returned.

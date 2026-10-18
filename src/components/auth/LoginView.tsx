@@ -48,7 +48,6 @@ export const LoginView: React.FC = () => {
           </div>
           <div className="absolute -bottom-1 -right-1 bg-emerald-500 text-zinc-950 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full shadow-sm flex items-center gap-1">
             <ShieldCheck size={10} />
-            <span>AMC</span>
           </div>
         </div>
 
