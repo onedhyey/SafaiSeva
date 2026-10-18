@@ -59,7 +59,7 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({
                 SafaiSeva
               </span>
               <span className="text-[9px] font-mono text-emerald-500 font-semibold tracking-tight">
-                AMC CIVIC EDGE
+                AHMEDABAD
               </span>
             </div>
           </div>
