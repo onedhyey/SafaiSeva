@@ -33,15 +33,16 @@ suites against a `postgres:17` service container with PostgREST v12.2.12.
 4. Smoke: `GET /api/health` → `identityMode` is `clerk` (or `demo` for the demo deploy);
    `npm run ops:check-ledger` → `ledger_ok`.
 
-### Hosting note
+### Hosting (Vercel)
 
-The API is a long-running Express process (in-memory rate limits, Gemini calls of several
-seconds, evidence downloads). As of 2026-10-18 the Vercel project `safai-seva` serves only
-the static Vite build — `/api/*` returns Vercel's 404 — so the live site runs on the local
-seed. Either adapt the server to a Vercel Function (export the app; check function
-duration and body limits against Gemini latency and video size; the rate limiter would need
-a shared store), or host the API as one container (Mumbai region) and rewrite `/api/*` to
-it. Decision D6 in the audit.
+`vercel.json` builds with `npm run build:vercel`: the frontend goes to `dist/` (static,
+served by Vercel) and the API is bundled from `server/vercel.ts` into `api/_app.mjs`, served
+as one Vercel Function at `/api/*` (`api/index.mjs`, max 60 s). The same Express app runs
+locally and in a container through `server.ts` (`server/app.ts` is shared). The old build put
+`dist/server.cjs` and its source map into the public site — `build:vercel` no longer does.
+
+Function limits to keep in mind: request bodies ≤ 4.5 MB (evidence goes straight to Supabase
+Storage, so API bodies are small); in-memory rate limits are per instance.
 
 ## Scheduled jobs
 
@@ -50,6 +51,10 @@ it. Decision D6 in the audit.
 | Evidence retention | `npm run ops:purge-evidence` | daily | delete photos/videos older than `EVIDENCE_RETENTION_DAYS` (default 90); hashes kept |
 | Settled-leaves push | `npm run ops:notify-settled` | hourly (`SETTLED_WINDOW_MINUTES=60`) | "your leaves are ready" |
 | Ledger reconciliation | `npm run ops:check-ledger` | daily (alert on exit 1) | `v_ledger_reconciliation` must be empty |
+
+On Vercel all three run once a day from `GET /api/cron/daily` (03:00 IST, `vercel.json`
+`crons`; Hobby plans allow daily crons), authorised by `CRON_SECRET`. The settled-leaves push
+then uses a 24 h window.
 
 Any scheduler works (host cron, GitHub Actions `schedule:` with the service-role env as
 secrets, Supabase scheduled functions calling an endpoint).

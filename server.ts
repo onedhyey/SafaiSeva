@@ -3,51 +3,14 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { env, supabaseConfigured, geminiConfigured } from "./server/env.ts";
-import { mountApiRoutes } from "./server/routes.ts";
 import { currentIdentityMode } from "./server/principal.ts";
-import { securityHeaders, requestLog, cspReport } from "./server/http.ts";
-import { cspReportLimiter } from "./server/rateLimit.ts";
+import { createApp } from "./server/app.ts";
 
-const app = express();
+// Long-running server for local development and container hosting. On Vercel the same
+// app runs as a Function (server/vercel.ts) and the frontend is served as static files.
+const app = createApp();
 const PORT = Number(process.env.PORT) || 3000;
 
-app.disable("x-powered-by");
-// Behind a load balancer / platform proxy set TRUST_PROXY to its hop count (usually 1) so
-// req.ip and req.secure reflect the client. Off by default: trusting a header nobody
-// strips lets any caller spoof its IP.
-if (process.env.TRUST_PROXY) app.set("trust proxy", Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY);
-app.use(securityHeaders);
-app.use("/api", requestLog);
-
-// Evidence photos/videos are uploaded straight to Storage via a signed URL (audit B2);
-// the JSON body now only carries object keys + small derived video keyframes, so a tight
-// limit is both safe and a DoS backstop on the unauthenticated surface.
-app.use(express.json({ limit: "2mb" }));
-app.post("/api/csp-report", cspReportLimiter, express.json({ type: ["application/csp-report", "application/reports+json"], limit: "16kb" }), cspReport);
-app.use(express.urlencoded({ extended: true, limit: "2mb" }));
-
-// ---------------------------------------------------------------------------------------
-// Health
-// ---------------------------------------------------------------------------------------
-app.get("/api/health", (_req, res) => {
-  res.json({
-    status: "ok",
-    model: env.geminiModel,
-    geminiConfigured: geminiConfigured(),
-    supabaseConfigured: supabaseConfigured(),
-    authEnabled: env.authEnabled,
-    identityMode: currentIdentityMode(),
-  });
-});
-
-// ---------------------------------------------------------------------------------------
-// SafaiSeva API — all verification / credit logic is server-authoritative (audit C2).
-// ---------------------------------------------------------------------------------------
-mountApiRoutes(app);
-
-// ---------------------------------------------------------------------------------------
-// Vite middleware (dev) / static serving (prod)
-// ---------------------------------------------------------------------------------------
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

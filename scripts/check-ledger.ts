@@ -1,16 +1,15 @@
-// Ledger reconciliation check: v_ledger_reconciliation must be empty. Exits 1 and prints
-// the offending rows when it is not, so a scheduler (cron / GitHub Actions) can alert.
-// `npm run ops:check-ledger`
+// Ledger reconciliation check: exits 1 and prints the offending rows when
+// v_ledger_reconciliation is not empty. `npm run ops:check-ledger`
 import 'dotenv/config';
-import { admin } from '../server/supabaseAdmin.ts';
+import { checkLedger } from '../server/jobs.ts';
 
-const { data, error } = await admin().from('v_ledger_reconciliation').select('*').limit(100);
-if (error) {
-  console.error(JSON.stringify({ event: 'ledger_check_failed', error: error.message }));
-  process.exit(1);
-}
-if (data && data.length) {
-  console.error(JSON.stringify({ event: 'ledger_mismatch', count: data.length, rows: data }));
-  process.exit(1);
-}
-console.log(JSON.stringify({ event: 'ledger_ok' }));
+checkLedger()
+  .then((r) => {
+    if (r.ok) return console.log(JSON.stringify({ event: 'ledger_ok' }));
+    console.error(JSON.stringify({ event: 'ledger_mismatch', count: r.mismatches.length, rows: r.mismatches }));
+    process.exitCode = 1;
+  })
+  .catch((e) => {
+    console.error(JSON.stringify({ event: 'ledger_check_failed', error: String(e?.message ?? e) }));
+    process.exitCode = 1;
+  });

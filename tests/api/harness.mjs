@@ -270,6 +270,7 @@ export async function startStack({ env = {} } = {}) {
         GEMINI_BASE_URL: `${proxyUrl}/gemini`,
         GEMINI_MODEL: 'fake-model',
         QR_SIGNING_SECRET: 'test-qr-secret',
+        CRON_SECRET: 'test-cron-secret',
         VITE_AUTH_ENABLED: 'false',
         VAPID_PUBLIC_KEY: vapid.publicKey,
         VAPID_PRIVATE_KEY: vapid.privateKey,

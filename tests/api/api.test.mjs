@@ -372,6 +372,18 @@ try {
     eq(m.household_id, hh, 'joined');
   });
 
+  await test('daily cron: refuses without the secret, runs every job with it', async () => {
+    const no = await fetch(s.base + '/api/cron/daily');
+    eq(no.status, 401, 'no secret');
+    const bad = await fetch(s.base + '/api/cron/daily', { headers: { authorization: 'Bearer wrong' } });
+    eq(bad.status, 401, 'wrong secret');
+    const ok = await fetch(s.base + '/api/cron/daily', { headers: { authorization: 'Bearer test-cron-secret' } });
+    eq(ok.status, 200, 'with secret');
+    const body = await ok.json();
+    assert(body.ledger && body.purgeEvidence && body.notifySettled, JSON.stringify(body));
+    eq(body.ledger.ok, true, `ledger ${JSON.stringify(body.ledger)}`);
+  });
+
   await test('ledger reconciliation is empty after the whole run', async () => {
     const rows = (await s.db.query(`select * from public.v_ledger_reconciliation`)).rows;
     eq(rows, [], 'reconciliation');
