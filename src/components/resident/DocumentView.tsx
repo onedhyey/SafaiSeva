@@ -29,6 +29,13 @@ import {
 import { LeafGlyph } from '../LeafGlyph';
 import { LazyLocationPicker as LocationPickerModal } from '../LazyLocationPicker';
 import { fitWithin, PHOTO_MAX_PX, KEYFRAME_MAX_PX } from '../../lib/imageSize';
+import {
+  FrameSampler,
+  encodeTimelapse,
+  mmss,
+  MAX_RECORDING_S,
+  REALTIME_LIMIT_S,
+} from '../../lib/timelapse';
 import { analyse, analyseVideo, OfflineSubmitError, checklistToArray } from '../../lib/verification';
 import { dataUrlToBlob } from '../../lib/api';
 import { enqueueCapture } from '../../lib/offlineQueue';
@@ -122,6 +129,10 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
   const recordedChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<any>(null);
   const keyframeTimerRef = useRef<any>(null);
+  const samplerRef = useRef<FrameSampler<string> | null>(null);
+  const recordingStartRef = useRef<number>(0);
+  const recordingMimeRef = useRef<string>('video/webm');
+  const [timelapseProgress, setTimelapseProgress] = useState<number | null>(null);
 
   const photoStages = [
     { id: '1', name: 'Detecting waste streams', desc: 'Segmenting declared stream containers' },
@@ -315,7 +326,11 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
     return null;
   };
 
-  // Start Stage 2 Video Recording
+  // Start Stage 2 Video Recording.
+  // Length policy (src/lib/timelapse.ts): record as long as needed up to 10 min. Up to
+  // 30 s the clip is used as recorded; anything longer becomes a 30-second time-lapse built
+  // on the device from evenly spaced frames, so uploads stay small however long someone
+  // records. Recording only ever comes from this in-app camera — there is no gallery import.
   const startVideoRecording = () => {
     if (!streamRef.current) {
       startCamera(facingMode);
@@ -325,107 +340,117 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
     setRecordedVideoUrl('');
     setRecordedVideoBase64('');
     setRecordedVideoBlob(null);
-    const frames: string[] = [];
-
-    // Capture initial frame
-    const f0 = captureCurrentFrame();
-    if (f0) frames.push(f0);
+    setVideoKeyframes([]);
+    const sampler = new FrameSampler<string>();
+    samplerRef.current = sampler;
+    const startedAt = Date.now();
+    recordingStartRef.current = startedAt;
 
     let mimeType = 'video/webm';
     if (typeof MediaRecorder !== 'undefined') {
       if (!MediaRecorder.isTypeSupported('video/webm')) {
-        if (MediaRecorder.isTypeSupported('video/mp4')) {
-          mimeType = 'video/mp4';
-        } else {
-          mimeType = '';
-        }
+        mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : '';
       }
     }
+    recordingMimeRef.current = mimeType;
+
+    // Frame sampling for the time-lapse and the model's stills, whatever the length.
+    keyframeTimerRef.current = setInterval(() => {
+      const t = Date.now() - startedAt;
+      if (sampler.wants(t)) {
+        const frame = captureCurrentFrame();
+        if (frame) sampler.add(t, frame);
+      }
+    }, 50);
 
     try {
       if (!streamRef.current) throw new Error('No active camera stream');
-      const recorder = mimeType
-        ? new MediaRecorder(streamRef.current, { mimeType })
-        : new MediaRecorder(streamRef.current);
-
+      const options: MediaRecorderOptions = { videoBitsPerSecond: 1_000_000 };
+      if (mimeType) options.mimeType = mimeType;
+      const recorder = new MediaRecorder(streamRef.current, options);
       mediaRecorderRef.current = recorder;
-
       recorder.ondataavailable = (event) => {
-        if (event.data && event.data.size > 0) {
-          recordedChunksRef.current.push(event.data);
-        }
+        if (event.data && event.data.size > 0) recordedChunksRef.current.push(event.data);
       };
-
-      recorder.onstop = () => {
-        const blob = new Blob(recordedChunksRef.current, { type: mimeType || 'video/webm' });
-        setRecordedVideoBlob(blob);
-        const url = URL.createObjectURL(blob);
-        setRecordedVideoUrl(url);
-
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setRecordedVideoBase64(reader.result as string);
-        };
-        reader.readAsDataURL(blob);
-      };
-
       recorder.start(500);
-      setIsRecording(true);
-      setRecordingSeconds(0);
-
-      // Periodic keyframe capture during recording
-      keyframeTimerRef.current = setInterval(() => {
-        const frame = captureCurrentFrame();
-        if (frame && frames.length < 5) {
-          frames.push(frame);
-          setVideoKeyframes([...frames]);
-        }
-      }, 900);
-
-      // 4-second auto-stop timer
-      let secs = 0;
-      recordingTimerRef.current = setInterval(() => {
-        secs += 1;
-        setRecordingSeconds(secs);
-        if (secs >= 4) {
-          stopVideoRecording();
-        }
-      }, 1000);
     } catch (err) {
-      console.warn('MediaRecorder error, using keyframe-based video capture:', err);
-      setIsRecording(true);
-      setRecordingSeconds(0);
-
-      let secs = 0;
-      recordingTimerRef.current = setInterval(() => {
-        secs += 1;
-        setRecordingSeconds(secs);
-        const frame = captureCurrentFrame();
-        if (frame && frames.length < 5) {
-          frames.push(frame);
-          setVideoKeyframes([...frames]);
-        }
-        if (secs >= 4) {
-          setIsRecording(false);
-          clearInterval(recordingTimerRef.current);
-          clearInterval(keyframeTimerRef.current);
-          if (frames.length > 0) {
-            setRecordedVideoBase64(frames[0]);
-            setRecordedVideoUrl(frames[0]);
-          }
-        }
-      }, 1000);
+      // No MediaRecorder: the sampled frames alone become the evidence.
+      console.warn('MediaRecorder unavailable, using sampled frames only:', err);
+      mediaRecorderRef.current = null;
     }
+
+    setIsRecording(true);
+    setRecordingSeconds(0);
+    recordingTimerRef.current = setInterval(() => {
+      const secs = Math.floor((Date.now() - startedAt) / 1000);
+      setRecordingSeconds(secs);
+      // Past 30 s the real-time clip will be replaced by the time-lapse: stop recording it
+      // so a long session doesn't hold minutes of video in memory.
+      if (secs >= REALTIME_LIMIT_S && mediaRecorderRef.current?.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
+      if (secs >= MAX_RECORDING_S) stopVideoRecording();
+    }, 250);
+  };
+
+  const useClip = (blob: Blob) => {
+    setRecordedVideoBlob(blob);
+    setRecordedVideoUrl(URL.createObjectURL(blob));
+    const reader = new FileReader();
+    reader.onloadend = () => setRecordedVideoBase64(reader.result as string);
+    reader.readAsDataURL(blob);
   };
 
   // Stop Stage 2 Video Recording
-  const stopVideoRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
-    setIsRecording(false);
+  const stopVideoRecording = async () => {
     if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
     if (keyframeTimerRef.current) clearInterval(keyframeTimerRef.current);
+    setIsRecording(false);
+
+    const sampler = samplerRef.current;
+    const elapsedS = (Date.now() - recordingStartRef.current) / 1000;
+    const stills = sampler ? sampler.pick(5) : [];
+    setVideoKeyframes(stills);
+
+    const recorder = mediaRecorderRef.current;
+    const recorderDone = new Promise<void>((resolve) => {
+      if (!recorder || recorder.state === 'inactive') return resolve();
+      recorder.onstop = () => resolve();
+      recorder.stop();
+    });
+    await recorderDone;
+
+    if (elapsedS <= REALTIME_LIMIT_S && recorder && recordedChunksRef.current.length) {
+      useClip(new Blob(recordedChunksRef.current, { type: recordingMimeRef.current || 'video/webm' }));
+      return;
+    }
+
+    // Longer than 30 s (or no MediaRecorder): build the 30-second time-lapse on the device.
+    const frames = sampler ? sampler.all() : [];
+    if (!frames.length) return;
+    if (typeof MediaRecorder === 'undefined') {
+      setRecordedVideoBase64(frames[0]);
+      setRecordedVideoUrl(frames[0]);
+      return;
+    }
+    try {
+      setTimelapseProgress(0);
+      const first = await createImageBitmap(dataUrlToBlob(frames[0]));
+      const size = { width: first.width, height: first.height };
+      first.close();
+      const blob = await encodeTimelapse(frames.map(dataUrlToBlob), {
+        ...size,
+        mimeType: recordingMimeRef.current,
+        onProgress: setTimelapseProgress,
+      });
+      useClip(blob);
+    } catch (e) {
+      console.warn('Time-lapse encoding failed; submitting the sampled stills only.', e);
+      setRecordedVideoBase64(frames[0]);
+      setRecordedVideoUrl(frames[0]);
+    } finally {
+      setTimelapseProgress(null);
+    }
   };
 
   // Save the current capture to the offline queue (audit P6 / T3.1). Reused both when we
@@ -1092,7 +1117,7 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
               </div>
             </div>
             <p className="text-[11px] text-muted-l border-t border-amber/20 pt-2 leading-relaxed">
-              Your submission has <strong>not failed</strong>. To verify the segregation and calculate your variable Leaf Credits, please record a quick 4-second video sweep of your bins, or retake a photo.
+              Your submission has <strong>not failed</strong>. To verify the segregation and calculate your variable Leaf Credits, please record a short video sweep of your bins (as long as you need, up to 10 min — anything over 30 seconds becomes a 30-second time-lapse), or retake a photo.
             </p>
           </div>
 
@@ -1160,7 +1185,10 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                       {isRecording ? (
                         <>
                           <div className="w-2 h-2 rounded-full bg-red animate-ping" />
-                          <span className="text-red font-bold">RECORDING (0:0{recordingSeconds} / 0:04)</span>
+                          <span className="text-red font-bold">
+                            RECORDING {mmss(recordingSeconds)} / {mmss(MAX_RECORDING_S)}
+                            {recordingSeconds >= REALTIME_LIMIT_S && ' · time-lapse'}
+                          </span>
                         </>
                       ) : (
                         <>
@@ -1177,9 +1205,11 @@ export const DocumentView: React.FC<DocumentViewProps> = ({
                   {/* Sweep instruction */}
                   <div className="relative w-full h-24 flex items-center justify-center">
                     <div className="text-[11px] font-medium text-white/90 bg-black/60 px-3 py-1.5 rounded-md backdrop-blur-xs text-center border border-white/20 shadow-md">
-                      {isRecording
-                        ? 'Slowly pan over wet, dry, and sanitary bins...'
-                        : 'Tap Record below to start 4-second video clip'}
+                      {timelapseProgress !== null
+                        ? `Making your 30-second time-lapse… ${Math.round(timelapseProgress * 100)}%`
+                        : isRecording
+                        ? 'Slowly pan over each bin, lids open…'
+                        : 'Record as long as you need, up to 10 min. Anything over 30 seconds is sped up to a 30-second time-lapse.'}
                     </div>
                   </div>
 

@@ -370,6 +370,17 @@ export async function startStack({ env = {} } = {}) {
   }
 }
 
+/** A JPEG as a phone gallery would have it: carries EXIF camera metadata. */
+export async function galleryJpeg() {
+  const sharp = (await import('sharp')).default;
+  const raw = Buffer.alloc(64 * 64 * 3);
+  for (let i = 0; i < raw.length; i++) raw[i] = Math.floor(Math.random() * 256);
+  return sharp(raw, { raw: { width: 64, height: 64, channels: 3 } })
+    .jpeg()
+    .withExif({ IFD0: { Make: 'Samsung', Model: 'SM-A146' } })
+    .toBuffer();
+}
+
 /** A small random-noise JPEG: distinct bytes and a distinct perceptual hash per call. */
 export async function noiseJpeg() {
   const sharp = (await import('sharp')).default;

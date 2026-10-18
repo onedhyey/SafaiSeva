@@ -1,6 +1,6 @@
 // End-to-end API tests: the real Express routes against real Postgres via PostgREST.
 // Proves the audit fixes at the HTTP surface the client actually uses.
-import { startStack, postgrestBin, noiseJpeg, CLEAN_EVIDENCE } from './harness.mjs';
+import { startStack, postgrestBin, noiseJpeg, galleryJpeg, CLEAN_EVIDENCE } from './harness.mjs';
 import { test, done, assert, eq } from '../db/harness.mjs';
 
 if (!postgrestBin()) {
@@ -331,6 +331,24 @@ try {
     });
     eq(r.status, 200, `verify (${r.text})`);
     assert(/[\u0A80-\u0AFF]/.test(r.body.reasonText), `Gujarati text: ${r.body.reasonText}`);
+  });
+
+  await test('camera only: a gallery photo (EXIF camera metadata) is refused', async () => {
+    const r = await s.submitPhoto(dev, await galleryJpeg());
+    eq(r.status, 422, `gallery photo (${r.text})`);
+    assert(/in-app camera|SafaiSeva camera/i.test(r.body?.error ?? ''), r.text);
+  });
+
+  await test('video size is capped server-side', async () => {
+    const signed = await s.call('POST', '/api/uploads/sign', { device: dev, body: { kind: 'video', contentType: 'video/webm' } });
+    eq(signed.status, 200, 'sign');
+    const big = Buffer.alloc(21 * 1024 * 1024, 1);
+    await fetch(signed.body.uploadUrl, { method: 'PUT', headers: { 'content-type': 'video/webm' }, body: big });
+    const r = await s.call('POST', '/api/handovers/verify', {
+      device: dev,
+      body: { declaredStreams: ['wet', 'dry'], attempt: 2, videoKey: signed.body.key },
+    });
+    eq(r.status, 413, `oversized video (${r.text})`);
   });
 
   await test('ledger reconciliation is empty after the whole run', async () => {
