@@ -17,6 +17,7 @@ import {
 import { signTicket, assertTicketSigningReady } from './qrToken.ts';
 import { resolveCaptureTime } from './captureTime.ts';
 import { rpcError } from './rpcErrors.ts';
+import { isInAppPhoto, MAX_VIDEO_BYTES, MAX_INLINE_FRAMES, httpError } from './evidenceChecks.ts';
 import { currentIdentityMode } from './principal.ts';
 import { pushPublicKey, saveSubscription, removeSubscription, notifyHousehold, notifyUsers } from './push.ts';
 import {
@@ -323,6 +324,21 @@ export function mountApiRoutes(app: Express) {
       if (photoKey && !photoData) return fail(res, 502, 'Could not read the uploaded photo.');
       const videoData = videoKey ? await fetchEvidence(videoKey) : null;
       if (videoKey && !videoData) return fail(res, 502, 'Could not read the uploaded video.');
+
+      // Intake rules (server/evidenceChecks.ts): in-app camera only, bounded video size.
+      if (photoData && !(await isInAppPhoto(photoData.buffer))) {
+        throw httpError(
+          422,
+          'Photos must be taken with the SafaiSeva in-app camera — photos from the gallery are not accepted.'
+        );
+      }
+      if (videoData && videoData.bytes > MAX_VIDEO_BYTES) {
+        throw httpError(
+          413,
+          'This video is too large. Record again in the app — anything over 30 seconds is turned into a 30-second time-lapse.'
+        );
+      }
+      if (videoFrames.length > MAX_INLINE_FRAMES) throw httpError(400, 'Too many video frames.');
 
       const mediaKind: 'photo' | 'video' = videoData ? 'video' : 'photo';
 
