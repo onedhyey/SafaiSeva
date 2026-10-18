@@ -4,6 +4,7 @@ import { LeafGlyph } from '../LeafGlyph';
 import { LocationData } from '../../types';
 import { workerIssue } from '../../lib/api';
 import { LazyLocationPicker as LocationPickerModal } from '../LazyLocationPicker';
+import { useI18n } from '../../lib/i18n';
 
 interface IssueCreditModalProps {
   isOpen: boolean;
@@ -18,6 +19,7 @@ export const IssueCreditModal: React.FC<IssueCreditModalProps> = ({
   onCreditIssued,
   workerId,
 }) => {
+  const { t: tr } = useI18n();
   const [householdId, setHouseholdId] = useState<string>('');
   const [householdName, setHouseholdName] = useState<string>('');
   const [selectedStreamWet, setSelectedStreamWet] = useState<boolean>(true);
@@ -90,11 +92,11 @@ export const IssueCreditModal: React.FC<IssueCreditModalProps> = ({
         {/* Header */}
         <div className="mb-4">
           <div className="inline-flex items-center gap-1 bg-emerald-950/80 border border-emerald-500/30 text-emerald-400 px-2 py-0.5 rounded-sm text-[11px] font-mono font-bold uppercase tracking-wider mb-1">
-            AMC Equity Protocol
+            {tr('ic.kicker')}
           </div>
-          <h2 className="text-sm font-bold text-white">Issue Credit Without Smartphone</h2>
+          <h2 className="text-sm font-bold text-white">{tr('ic.title')}</h2>
           <p className="text-xs text-zinc-400 leading-relaxed mt-0.5">
-            Direct doorstep validation for households with feature phones or no device.
+            {tr('ic.sub')}
           </p>
         </div>
 
@@ -114,7 +116,7 @@ export const IssueCreditModal: React.FC<IssueCreditModalProps> = ({
             {/* Quick Pick Offline Households */}
             <div className="space-y-1.5">
               <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-wider">
-                Quick Select Offline Registered Household
+                {tr('ic.quick')}
               </label>
               <div className="space-y-1">
                 {quickHouseholds.map((hh) => (
@@ -135,7 +137,7 @@ export const IssueCreditModal: React.FC<IssueCreditModalProps> = ({
                       <div className="font-semibold text-zinc-200">{hh.name}</div>
                       <div className="text-[10px] text-zinc-400 font-mono">{hh.id} · {hh.address}</div>
                     </div>
-                    <span className="font-mono text-xs text-emerald-400 font-bold">Select</span>
+                    <span className="font-mono text-xs text-emerald-400 font-bold">{tr('ic.select')}</span>
                   </button>
                 ))}
               </div>
@@ -144,7 +146,7 @@ export const IssueCreditModal: React.FC<IssueCreditModalProps> = ({
             {/* Manual Household ID input */}
             <div className="space-y-1.5">
               <label className="block text-xs font-semibold text-white">
-                Household ID / AMC QR Code Number
+                {tr('ic.hhId')}
               </label>
               <div className="relative">
                 <input
@@ -163,7 +165,7 @@ export const IssueCreditModal: React.FC<IssueCreditModalProps> = ({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-zinc-300 font-medium">
                   <MapPin size={13} className="text-emerald-400 shrink-0" />
-                  <span className="text-[11px] uppercase tracking-wider font-mono text-zinc-400">Doorstep Location:</span>
+                  <span className="text-[11px] uppercase tracking-wider font-mono text-zinc-400">{tr('ic.location')}</span>
                 </div>
                 <button
                   type="button"
@@ -171,7 +173,7 @@ export const IssueCreditModal: React.FC<IssueCreditModalProps> = ({
                   className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-400 bg-emerald-950/60 hover:bg-emerald-950 border border-emerald-500/30 px-2 py-0.5 rounded-xs transition-colors cursor-pointer"
                 >
                   <Edit3 size={11} />
-                  <span>Edit Map</span>
+                  <span>{tr('doc.editMap')}</span>
                 </button>
               </div>
               <div className="text-[11px] font-mono text-zinc-300 truncate">
@@ -182,7 +184,7 @@ export const IssueCreditModal: React.FC<IssueCreditModalProps> = ({
             {/* Physical Check Toggles */}
             <div className="space-y-1.5">
               <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-wider">
-                Physical Inspection Checklist
+                {tr('ic.checklist')}
               </label>
               <div className="grid grid-cols-2 gap-2">
                 <button
@@ -194,7 +196,7 @@ export const IssueCreditModal: React.FC<IssueCreditModalProps> = ({
                       : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700'
                   }`}
                 >
-                  <span>Wet Stream Clean</span>
+                  <span>{tr('ic.wet')}</span>
                   <Check size={14} className={selectedStreamWet ? 'text-emerald-400' : 'text-transparent'} />
                 </button>
                 <button
@@ -206,7 +208,7 @@ export const IssueCreditModal: React.FC<IssueCreditModalProps> = ({
                       : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700'
                   }`}
                 >
-                  <span>Dry Stream Clean</span>
+                  <span>{tr('ic.dry')}</span>
                   <Check size={14} className={selectedStreamDry ? 'text-emerald-400' : 'text-transparent'} />
                 </button>
               </div>
@@ -219,7 +221,7 @@ export const IssueCreditModal: React.FC<IssueCreditModalProps> = ({
                 onClick={onClose}
                 className="w-1/3 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-xs font-semibold text-zinc-300 py-2.5 rounded-lg transition-colors cursor-pointer"
               >
-                Cancel
+                {tr('common.cancel')}
               </button>
               <button
                 type="submit"
@@ -227,7 +229,7 @@ export const IssueCreditModal: React.FC<IssueCreditModalProps> = ({
                 className="w-2/3 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
               >
                 <LeafGlyph size={14} color="#000000" />
-                <span>{isSubmitting ? 'Issuing…' : 'Issue leaves'}</span>
+                <span>{isSubmitting ? tr('ic.issuing') : tr('ic.issue')}</span>
               </button>
             </div>
           </form>
