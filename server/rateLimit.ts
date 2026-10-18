@@ -14,7 +14,7 @@
 
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import type { Request, Response } from 'express';
-import { env } from './env.ts';
+import { currentIdentityMode } from './principal.ts';
 
 // Decode — NOT verify — the `sub` from a Clerk bearer so the bucket key stays stable
 // across the ~60s session-token rotation (keying by the raw token would hand every user a
@@ -36,10 +36,11 @@ function clerkSubUnverified(req: Request): string | null {
 }
 
 function identityKey(req: Request): string {
-  if (env.authEnabled) {
+  const mode = currentIdentityMode();
+  if (mode === 'clerk') {
     const sub = clerkSubUnverified(req);
     if (sub) return `clerk:${sub}`;
-  } else {
+  } else if (mode === 'demo') {
     const dev = (req.header('x-device-id') || '').trim();
     if (dev.length >= 6) return `dev:${dev}`;
   }
@@ -88,3 +89,6 @@ export const mutationLimiter = limiter(15 * MIN, 30);
 
 // GET /api/wallet, GET /api/review-queue — polled by the UI on focus / after actions.
 export const readLimiter = limiter(5 * MIN, 120);
+
+// POST /api/csp-report — unauthenticated browser reports; bounded so it cannot flood logs.
+export const cspReportLimiter = limiter(MIN, 20);

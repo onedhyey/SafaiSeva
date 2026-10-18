@@ -22,8 +22,14 @@ export const env = {
   })(),
   // gemini-2.5-flash is deprecated for new API keys; 3.6-flash is the current default.
   geminiModel: pick('GEMINI_MODEL') || 'gemini-3.6-flash',
+  // Optional: route Gemini calls through a proxy / regional endpoint (also used by tests).
+  geminiBaseUrl: pick('GEMINI_BASE_URL'),
 
   authEnabled: String(pick('VITE_AUTH_ENABLED') ?? '').toLowerCase() === 'true',
+  // Anonymous device / demo-role identity outside NODE_ENV=development (audit F1/F2).
+  // Only for a deliberately separate public demo with no real rewards.
+  allowDemoIdentity: String(pick('ALLOW_DEMO_IDENTITY') ?? '').toLowerCase() === 'true',
+  nodeEnv: pick('NODE_ENV'),
   clerkSecretKey: pick('CLERK_SECRET_KEY'),
   // Optional hardening: comma-separated list of origins allowed to mint the session
   // tokens we accept (defaults to APP_URL when set). Leave unset to skip the check.

@@ -3,6 +3,7 @@
 // server prefers that (see server/principal.ts).
 
 import { getDeviceId, getAuthToken } from './authContext';
+import { getLang } from './i18n';
 
 export interface BinsInfo {
   count: number;
@@ -122,6 +123,8 @@ async function apiFetch<T>(
     headers: {
       'Content-Type': 'application/json',
       'x-device-id': getDeviceId(),
+      // Verdict reasons come back in the resident's language (reason codes have en + gu).
+      'x-lang': getLang(),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(asWorker ? { 'x-demo-worker': DEMO_WORKER_CODE } : {}),
       ...(asOfficer ? { 'x-demo-officer': DEMO_OFFICER_CODE } : {}),
@@ -219,9 +222,10 @@ export function redeemTicket(transitType: string): Promise<RedeemResponse> {
 }
 
 // ---- Household onboarding (auth-on path) ----
+// Joining takes an invite code the owner shares, and the owner approves the request — the
+// public household code is not enough on its own (audit F3).
 export interface CreateHouseholdResponse {
   code: string;
-  joinCode: string;
   nearbyExisting?: string | null;
 }
 
@@ -236,10 +240,31 @@ export function createHousehold(payload: {
   });
 }
 
-export function joinHousehold(code: string): Promise<{ code: string }> {
-  return apiFetch<{ code: string }>('/api/household/join', {
+export function requestToJoinHousehold(token: string): Promise<{ status: 'pending'; requestId: string }> {
+  return apiFetch<{ status: 'pending'; requestId: string }>('/api/household/join', {
     method: 'POST',
-    body: JSON.stringify({ code: code.trim() }),
+    body: JSON.stringify({ token: token.trim() }),
+  });
+}
+
+export function createHouseholdInvite(): Promise<{ token: string; expiresAt: string }> {
+  return apiFetch<{ token: string; expiresAt: string }>('/api/household/invite', { method: 'POST' });
+}
+
+export interface JoinRequest {
+  id: string;
+  createdAt: string;
+  name: string;
+}
+
+export function getJoinRequests(): Promise<{ requests: JoinRequest[] }> {
+  return apiFetch<{ requests: JoinRequest[] }>('/api/household/requests');
+}
+
+export function decideJoinRequest(id: string, approve: boolean): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/api/household/requests/${encodeURIComponent(id)}/decide`, {
+    method: 'POST',
+    body: JSON.stringify({ approve }),
   });
 }
 
@@ -355,15 +380,102 @@ export function getOfficerAnomalies(): Promise<{ anomalies: OfficerAnomaly[] }> 
   return apiFetch<{ anomalies: OfficerAnomaly[] }>('/api/officer/anomalies', { asOfficer: true });
 }
 
-// ---- Resident ward leaderboard (Impact tab; schema 0017) ----
+// ---- Resident ward leaderboard (Impact tab; v_ward_leaderboard_live) ----
+// Ranks by credits earned in the last 30 days; carries no household codes or addresses.
 export interface LeaderboardEntry {
   rank: number;
-  householdCode: string;
-  society: string;
-  streak: number;
+  label: string;
   credits: number;
+  isYou: boolean;
 }
 
 export function getWardLeaderboard(): Promise<{ leaderboard: LeaderboardEntry[] }> {
   return apiFetch<{ leaderboard: LeaderboardEntry[] }>('/api/ward/leaderboard');
+}
+
+// ---- The signed-in person: privacy notice consent + erasure (audit F8) ----
+export interface MeResponse {
+  identityMode: 'clerk' | 'demo' | 'disabled';
+  consentVersion: string;
+  consentAcceptedVersion: string | null;
+  consentRequired: boolean;
+  householdCode: string | null;
+}
+
+export function getMe(): Promise<MeResponse> {
+  return apiFetch<MeResponse>('/api/me');
+}
+
+export function acceptConsent(version: string): Promise<{ consentVersion: string }> {
+  return apiFetch<{ consentVersion: string }>('/api/me/consent', {
+    method: 'POST',
+    body: JSON.stringify({ version }),
+  });
+}
+
+export function deleteMyData(): Promise<{ deleted: true; removedObjects: number }> {
+  return apiFetch<{ deleted: true; removedObjects: number }>('/api/me', { method: 'DELETE' });
+}
+
+// ---- Web Push ----
+export function getPushConfig(): Promise<{ publicKey: string | null }> {
+  return apiFetch<{ publicKey: string | null }>('/api/push/config');
+}
+
+export function savePushSubscription(sub: PushSubscriptionJSON): Promise<{ subscribed: boolean }> {
+  return apiFetch<{ subscribed: boolean }>('/api/push/subscribe', {
+    method: 'POST',
+    body: JSON.stringify(sub),
+  });
+}
+
+export function removePushSubscription(endpoint: string): Promise<{ subscribed: boolean }> {
+  return apiFetch<{ subscribed: boolean }>('/api/push/unsubscribe', {
+    method: 'POST',
+    body: JSON.stringify({ endpoint }),
+  });
+}
+
+export function sendTestPush(): Promise<{ sent: boolean }> {
+  return apiFetch<{ sent: boolean }>('/api/push/test', { method: 'POST' });
+}
+
+// ---- Officer moderation (schema 0022) ----
+export interface OfficerHouseholdHandover {
+  id: string;
+  collection_date: string;
+  status: 'pending' | 'verified' | 'needs_video' | 'in_review' | 'rejected';
+  credits_awarded: number;
+  confirmed_streams: string[] | null;
+  decision_reason_code: string | null;
+  decision_reason_text: string | null;
+  media_kind: string | null;
+  created_at: string;
+}
+
+export interface OfficerHouseholdResponse {
+  household: { code: string; address: string; suspended: boolean; suspendedReason: string | null };
+  handovers: OfficerHouseholdHandover[];
+}
+
+export function getOfficerHousehold(code: string): Promise<OfficerHouseholdResponse> {
+  return apiFetch<OfficerHouseholdResponse>(`/api/officer/households/${encodeURIComponent(code)}`, {
+    asOfficer: true,
+  });
+}
+
+export function reverseHandover(id: string, reason: string): Promise<{ reversed: number }> {
+  return apiFetch<{ reversed: number }>(`/api/officer/handovers/${encodeURIComponent(id)}/reverse`, {
+    method: 'POST',
+    asOfficer: true,
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function setHouseholdSuspension(code: string, suspended: boolean, reason: string): Promise<{ suspended: boolean }> {
+  return apiFetch<{ suspended: boolean }>(`/api/officer/households/${encodeURIComponent(code)}/suspension`, {
+    method: 'POST',
+    asOfficer: true,
+    body: JSON.stringify({ suspended, reason }),
+  });
 }

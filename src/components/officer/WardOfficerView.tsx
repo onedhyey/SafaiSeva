@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { WardStats, HandoverRecord } from '../../types';
 import { LeafGlyph } from '../LeafGlyph';
+import { HouseholdReviewPanel } from './HouseholdReviewPanel';
 import {
   ShieldAlert,
   Building2,
@@ -23,6 +24,7 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
   handovers,
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'anomalies' | 'audit' | 'districts'>('overview');
+  const [reviewing, setReviewing] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const filteredAnomalies = wardStats.anomalies.filter(
@@ -299,8 +301,12 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
 
                 <div className="pt-1 flex items-center justify-between text-[11px] font-mono">
                   <span className="text-muted-l">30-day History: {anom.totalSubmissions} submissions</span>
-                  <button className="bg-ink hover:bg-muted/20 border border-muted/40 text-tint px-2.5 py-1 rounded-xs text-[10px] font-bold">
-                    Schedule Physical Spot-Check
+                  <button
+                    type="button"
+                    onClick={() => setReviewing(anom.householdId)}
+                    className="bg-ink hover:bg-muted/20 border border-muted/40 text-tint px-2.5 rounded-xs text-[10px] font-bold min-h-[36px] cursor-pointer"
+                  >
+                    Review household
                   </button>
                 </div>
               </div>
@@ -432,6 +438,7 @@ export const WardOfficerView: React.FC<WardOfficerViewProps> = ({
           </div>
         </div>
       )}
+      {reviewing && <HouseholdReviewPanel householdCode={reviewing} onClose={() => setReviewing(null)} />}
     </div>
   );
 };

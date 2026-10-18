@@ -3,38 +3,14 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { env, supabaseConfigured, geminiConfigured } from "./server/env.ts";
-import { mountApiRoutes } from "./server/routes.ts";
+import { currentIdentityMode } from "./server/principal.ts";
+import { createApp } from "./server/app.ts";
 
-const app = express();
+// Long-running server for local development and container hosting. On Vercel the same
+// app runs as a Function (server/vercel.ts) and the frontend is served as static files.
+const app = createApp();
 const PORT = Number(process.env.PORT) || 3000;
 
-// Evidence photos/videos are uploaded straight to Storage via a signed URL (audit B2);
-// the JSON body now only carries object keys + small derived video keyframes, so a tight
-// limit is both safe and a DoS backstop on the unauthenticated surface.
-app.use(express.json({ limit: "2mb" }));
-app.use(express.urlencoded({ extended: true, limit: "2mb" }));
-
-// ---------------------------------------------------------------------------------------
-// Health
-// ---------------------------------------------------------------------------------------
-app.get("/api/health", (_req, res) => {
-  res.json({
-    status: "ok",
-    model: env.geminiModel,
-    geminiConfigured: geminiConfigured(),
-    supabaseConfigured: supabaseConfigured(),
-    authEnabled: env.authEnabled,
-  });
-});
-
-// ---------------------------------------------------------------------------------------
-// SafaiSeva API — all verification / credit logic is server-authoritative (audit C2).
-// ---------------------------------------------------------------------------------------
-mountApiRoutes(app);
-
-// ---------------------------------------------------------------------------------------
-// Vite middleware (dev) / static serving (prod)
-// ---------------------------------------------------------------------------------------
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -55,7 +31,7 @@ async function startServer() {
     console.log(
       `  gemini: ${geminiConfigured() ? env.geminiModel : "NOT CONFIGURED"} · ` +
         `supabase: ${supabaseConfigured() ? "ok" : "NOT CONFIGURED"} · ` +
-        `auth: ${env.authEnabled ? "enabled" : "open demo"}`
+        `identity: ${currentIdentityMode()}`
     );
   });
 }

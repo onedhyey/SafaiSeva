@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import {
   Role,
   HouseholdProfile,
@@ -27,8 +27,12 @@ import {
   getOfficerAnomalies,
   getWardLeaderboard,
   getWorkerProfile,
+  getMe,
   BinsInfo,
 } from './lib/api';
+import { ConsentModal } from './components/ConsentModal';
+import { useI18n } from './lib/i18n';
+import { UpdatePrompt } from './components/UpdatePrompt';
 import { serverHandoverToRecord, serverTicketToRecord } from './lib/serverMap';
 import { useOnline } from './lib/useOnline';
 import {
@@ -51,12 +55,18 @@ import { HouseholdSetupView } from './components/resident/HouseholdSetupView';
 import { DocumentView } from './components/resident/DocumentView';
 import { RewardsView } from './components/resident/RewardsView';
 import { ImpactView } from './components/resident/ImpactView';
-import { KarmachariView } from './components/karmachari/KarmachariView';
-import { WardOfficerView } from './components/officer/WardOfficerView';
+// Role screens residents never open are split out of the initial bundle.
+const KarmachariView = lazy(() =>
+  import('./components/karmachari/KarmachariView').then((m) => ({ default: m.KarmachariView }))
+);
+const WardOfficerView = lazy(() =>
+  import('./components/officer/WardOfficerView').then((m) => ({ default: m.WardOfficerView }))
+);
 import { OutboxView } from './components/resident/OutboxView';
 
 export default function App() {
   const { isSignedIn, selectedRole, setSelectedRole, user, authEnabled, authGate } = useAuth();
+  const { t } = useI18n();
   const [residentTab, setResidentTab] = useState<ResidentTab>('wallet');
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -84,6 +94,12 @@ export default function App() {
 
   // Auth-on path: a signed-in resident with no household yet must create or join one.
   const [needsHousehold, setNeedsHousehold] = useState<boolean>(false);
+  // Privacy notice (audit F8): the server refuses evidence until the current version is accepted.
+  const [consent, setConsent] = useState<{ required: boolean; version: string } | null>(null);
+  const [consentDismissed, setConsentDismissed] = useState<boolean>(false);
+  // Signed-in builds never show seeded numbers as if they were live (audit F14): on an API
+  // failure they show empty values and this message instead.
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Server-backed reward costs (fallback to nothing until the wallet call returns)
   const [redeemCosts, setRedeemCosts] = useState<Record<string, number>>({});
@@ -149,11 +165,18 @@ export default function App() {
         getDemoSettings(),
       ]);
 
-      let mergedHousehold = hh;
-      let mergedHandovers = hnds;
-      let mergedTickets = tkts;
+      // Demo builds start from the local seed; signed-in builds start empty and only ever
+      // show what the server returned.
+      const live = authEnabled;
+      let mergedHousehold = live ? { ...hh, balance: 0 } : hh;
+      let mergedHandovers = live ? [] : hnds;
+      let mergedTickets = live ? [] : tkts;
+      let failed = false;
 
       try {
+        getMe()
+          .then((me) => setConsent({ required: me.consentRequired, version: me.consentVersion }))
+          .catch(() => setConsent(null));
         const wallet = await getWallet();
         if (wallet.householdCode) {
           setNeedsHousehold(false);
@@ -168,7 +191,7 @@ export default function App() {
           // (the karmachari review queue).
           mergedHandovers = [
             ...serverRecords,
-            ...hnds.filter((h) => h.householdId !== hh.id),
+            ...(live ? [] : hnds.filter((h) => h.householdId !== hh.id)),
           ];
           mergedTickets = wallet.tickets.map(serverTicketToRecord);
           setBins(wallet.bins ?? null);
@@ -179,14 +202,31 @@ export default function App() {
           setNeedsHousehold(true);
         }
       } catch (e) {
-        console.warn('Wallet API unavailable — showing local state only.', e);
+        failed = true;
+        console.warn('Wallet API unavailable.', e);
       }
 
       // Ward stats are backend-driven: the officer screen (schema 0015 + 0016) and the
       // resident Impact-tab leaderboard (schema 0017). The seed remains the fallback for
       // whichever call is unreachable.
-      let mergedWardStats = ward;
-      try {
+      let mergedWardStats = live
+        ? {
+            ...ward,
+            householdsEnrolled: 0,
+            participationRateThisWeek: 0,
+            participationRateLastWeek: 0,
+            creditsIssued: 0,
+            rupeeValue: 0,
+            aiSplit: { approved: 0, inReview: 0, rejected: 0 },
+            subDistricts: [],
+            karmacharis: [],
+            anomalies: [],
+            leaderboard: [],
+          }
+        : ward;
+      // Role-specific endpoints only for the role in use: a resident must not spend its
+      // read budget (and log 403s) on officer / karmachari calls every tab switch.
+      if (!live || selectedRole === 'officer') try {
         const [dash, anom] = await Promise.all([
           getOfficerDashboard(),
           getOfficerAnomalies(),
@@ -205,18 +245,19 @@ export default function App() {
           anomalies: anom.anomalies,
         };
       } catch (e) {
-        console.warn('Officer API unavailable — using seeded ward stats.', e);
+        if (live) failed = true;
+        console.warn('Officer API unavailable.', e);
       }
       try {
         const { leaderboard } = await getWardLeaderboard();
-        if (leaderboard.length) mergedWardStats = { ...mergedWardStats, leaderboard };
+        if (live || leaderboard.length) mergedWardStats = { ...mergedWardStats, leaderboard };
       } catch (e) {
-        console.warn('Ward leaderboard API unavailable — using seeded leaderboard.', e);
+        console.warn('Ward leaderboard API unavailable.', e);
       }
 
       // Karmachari header identity + today's counters (schema: workers / worker_issuances).
       let mergedKarmachari = karm;
-      try {
+      if (!live || selectedRole === 'karmachari') try {
         const wp = await getWorkerProfile();
         mergedKarmachari = {
           ...karm,
@@ -230,8 +271,12 @@ export default function App() {
           overrideRate: wp.overrideRate,
         };
       } catch (e) {
-        console.warn('Worker profile API unavailable — using seeded karmachari.', e);
+        if (live) failed = true;
+        console.warn('Worker profile API unavailable.', e);
       }
+      setLoadError(
+        live && failed ? 'load.error' : null
+      );
 
       setHousehold(mergedHousehold);
       setHandovers(mergedHandovers);
@@ -244,11 +289,38 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [authEnabled, selectedRole]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Notification taps (and links) carry ?tab=wallet|rewards|impact or ?settings=…; open
+  // that screen — but never yank a resident out of an in-progress capture.
+  useEffect(() => {
+    const open = (raw: string) => {
+      let url: URL;
+      try {
+        url = new URL(raw, window.location.origin);
+      } catch {
+        return;
+      }
+      const tab = url.searchParams.get('tab');
+      if (tab && ['wallet', 'rewards', 'impact'].includes(tab)) {
+        setResidentTab((cur) => (cur === 'document' ? cur : (tab as ResidentTab)));
+      }
+      if (url.searchParams.has('settings')) setIsSettingsOpen(true);
+    };
+    if (window.location.search) {
+      open(window.location.href);
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'open-target' && typeof e.data.url === 'string') open(e.data.url);
+    };
+    navigator.serviceWorker?.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker?.removeEventListener('message', onMessage);
+  }, []);
 
   // Keep the wallet fresh when the resident moves between tabs (audit F1).
   useEffect(() => {
@@ -383,6 +455,19 @@ export default function App() {
           ) : (
             /* In the app: role-specific screens */
             <>
+              {loadError && (
+                <div role="alert" className="mb-3 bg-amber/10 border border-amber/30 rounded-md p-3 text-[11px] text-tint flex items-center justify-between gap-2">
+                  <span>{t(loadError)}</span>
+                  <button
+                    type="button"
+                    onClick={() => loadData()}
+                    className="text-[11px] font-semibold text-white bg-ink border border-muted/40 rounded-md px-2.5 min-h-[36px] cursor-pointer shrink-0"
+                  >
+                    {t('load.retry')}
+                  </button>
+                </div>
+              )}
+
               {/* RESIDENT VIEWS */}
               {activeRole === 'resident' && needsHousehold && (
                 <HouseholdSetupView
@@ -463,15 +548,19 @@ export default function App() {
 
               {/* KARMACHARI VIEW */}
               {activeRole === 'karmachari' && (
-                <KarmachariView karmachari={karmachari} onRefreshData={loadData} />
+                <Suspense fallback={null}>
+                  <KarmachariView karmachari={karmachari} onRefreshData={loadData} />
+                </Suspense>
               )}
 
               {/* WARD OFFICER VIEW */}
               {activeRole === 'officer' && (
-                <WardOfficerView
-                  wardStats={wardStats}
-                  handovers={handovers}
-                />
+                <Suspense fallback={null}>
+                  <WardOfficerView
+                    wardStats={wardStats}
+                    handovers={handovers}
+                  />
+                </Suspense>
               )}
             </>
           )}
@@ -527,6 +616,22 @@ export default function App() {
         onClose={() => setSelectedHandover(null)}
         onDisputed={loadData}
       />
+
+      <UpdatePrompt />
+
+      {/* Privacy notice — before the first submission (audit F8) */}
+      {inApp && activeRole === 'resident' && consent && (
+        <ConsentModal
+          // Dismissable, but it comes back whenever the resident opens the capture screen.
+          isOpen={consent.required && (!consentDismissed || residentTab === 'document')}
+          version={consent.version}
+          onAccepted={() => setConsent({ ...consent, required: false })}
+          onDismiss={() => {
+            setConsentDismissed(true);
+            if (residentTab === 'document') setResidentTab('wallet');
+          }}
+        />
+      )}
 
       {/* Bin setup / onboarding (audit P1) */}
       {inApp && activeRole === 'resident' && bins && (

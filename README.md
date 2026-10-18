@@ -98,7 +98,7 @@ The demo build includes a role switcher in the header so the full loop can be sh
 - **@google/genai** — `gemini-3.6-flash`, evidence‑only vision check
 - **Leaflet** + OpenStreetMap — the location picker (India‑wide, opens on Gujarat)
 - **Tailwind CSS**, **lucide-react**, **IBM Plex** (Sans / Sans Devanagari / Mono), self‑hosted
-- **vite-plugin-pwa** — manifest, service worker (network‑first for `/api`, cache‑first for assets)
+- **vite-plugin-pwa** (Workbox) — `src/sw.ts`: precached app shell (opens offline), network‑first navigations, `/api` never cached, update prompt, Web Push
 
 ## Getting started
 
@@ -112,18 +112,23 @@ npm run dev               # API + Vite on http://localhost:3000
 ```
 
 ```bash
-npm test          # adjudicator unit tests
+npm test          # unit: adjudicator, offline queue, server guards, i18n
+npm run test:db   # SQL on a real Postgres (TEST_DATABASE_URL or local binaries)
+npm run test:api  # Express → PostgREST → Postgres end to end (needs POSTGREST_BIN)
 npm run lint      # tsc --noEmit
-npm run build     # vite build + esbuild bundle of server.ts
+npm run build     # vite build + service worker + esbuild bundle of server.ts
 ```
+
+Deploying, scheduled jobs and rollback: `docs/OPERATIONS.md`.
 
 Best viewed at a ~390px mobile width. The camera flow needs a real camera and a granted
 permission; there is deliberately no file‑upload fallback.
 
 ## Demo script
 
-1. **Resident** opens → the bin setup asks how many separate bins you keep. Pick **Four
-   bins** → **+15 leaves** (2‑bin + 4‑bin milestones).
+1. **Resident** opens → the privacy notice, then the bin setup asks how many separate bins
+   you keep. Bin milestones (2/4/6 bins → 5/10/20 leaves) unlock once verified handovers
+   confirm that many streams, and settle after the 24 h hold.
 2. **Document today's handover** → the in‑app camera → select at least wet + dry → run the
    AI vision check → see the staged checks and the per‑stream readout. Outside 6 AM–12 PM
    you'll get *"outside your collection hours (6:00 AM – 12:00 PM)"*; a non‑waste photo

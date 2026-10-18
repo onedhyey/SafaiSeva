@@ -17,6 +17,12 @@ import {
 import { DemoOutcomeOverride, HouseholdProfile, AppTheme } from '../types';
 import { usePwaInstall } from '../lib/usePwaInstall';
 import { InstallModal } from './InstallModal';
+import { HouseholdMembersPanel } from './resident/HouseholdMembersPanel';
+import { DeleteMyDataSection } from './DeleteMyDataSection';
+import { NotificationsSection } from './NotificationsSection';
+import { useI18n, LANGS } from '../lib/i18n';
+import { HelpCenter } from './HelpCenter';
+import { HelpCircle } from 'lucide-react';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -43,11 +49,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   simulateOffline,
   onToggleOffline,
 }) => {
+  const { lang, setLang, t } = useI18n();
   const [resetting, setResetting] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [resetDone, setResetDone] = useState(false);
   const { isInstalled, isIos, hasNativePrompt, showInstallModal, setShowInstallModal, triggerInstall } = usePwaInstall();
 
   if (!isOpen) return null;
+
+  // Demo-only tools (role codes, simulated offline, local reset) never ship in a signed-in
+  // deployment (audit F14): they describe a demo, not the product.
+  const demoMode = import.meta.env.VITE_AUTH_ENABLED !== 'true';
 
   const fmtHour = (h: number) => {
     const hr12 = h % 12 === 0 ? 12 : h % 12;
@@ -108,8 +120,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Header */}
           <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
             <div>
-              <h3 className="text-sm font-semibold text-white">Demo Control Panel</h3>
-              <p className="text-[11px] text-zinc-400 font-mono">Jury presentation & deterministic state toggles</p>
+              <h3 className="text-sm font-semibold text-white">{demoMode ? 'Demo Control Panel' : 'Settings'}</h3>
+              {demoMode && (
+                <p className="text-[11px] text-zinc-400 font-mono">Jury presentation & deterministic state toggles</p>
+              )}
             </div>
             <button
               id="close-settings-modal-btn"
@@ -120,6 +134,47 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <X size={16} />
             </button>
           </div>
+
+          {/* Help centre */}
+          <button
+            type="button"
+            onClick={() => setHelpOpen(true)}
+            className="mt-3.5 w-full flex items-center gap-2.5 bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 rounded-lg p-3 text-left cursor-pointer min-h-[48px]"
+          >
+            <HelpCircle size={16} className="text-emerald-400 shrink-0" aria-hidden="true" />
+            <span className="text-xs font-semibold text-white flex-1">{t('help.open')}</span>
+            <span className="text-zinc-500 text-xs" aria-hidden="true">›</span>
+          </button>
+
+          {/* Language */}
+          <div className="mt-3.5">
+            <div className="text-xs font-semibold text-white mb-1.5" id="lang-label">{t('lang.label')}</div>
+            <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-labelledby="lang-label">
+              {LANGS.map((l) => (
+                <button
+                  key={l.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={lang === l.id}
+                  onClick={() => setLang(l.id)}
+                  className={`text-xs rounded-lg border min-h-[40px] cursor-pointer ${
+                    lang === l.id ? 'border-emerald-500 text-white bg-emerald-950/50' : 'border-zinc-700 text-zinc-300'
+                  }`}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Household invites + join approvals (owner only; audit F3) */}
+          {import.meta.env.VITE_AUTH_ENABLED === 'true' && (
+            <div className="mt-3.5">
+              <HouseholdMembersPanel />
+            </div>
+          )}
+
+          <NotificationsSection isInstalled={isInstalled} isIos={isIos} />
 
           {/* Standalone PWA Download Section (website only, hidden once installed) */}
           {!isInstalled && (
@@ -198,6 +253,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
 
+          {demoMode && (
+          <>
           {/* Demo Role Access Codes Reference */}
           <div className="mt-3.5 bg-zinc-950 p-3 rounded-lg border border-zinc-800 text-xs">
             <div className="text-xs font-semibold text-white mb-1.5 flex items-center justify-between">
@@ -222,6 +279,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
 
+          </>
+          )}
+
           {/* Verification is server-authoritative — no client-side outcome override */}
           <div className="mt-4">
             <label className="block text-xs font-semibold text-white mb-1.5">
@@ -234,6 +294,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
 
+          {demoMode && (
+          <>
           {/* Connectivity — simulate offline for the capture queue (T3.1) */}
           <div className="mt-4">
             <label className="block text-xs font-semibold text-white mb-1.5">Connectivity</label>
@@ -304,8 +366,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               )}
             </button>
           </div>
+
+          </>
+          )}
+
+          <DeleteMyDataSection />
         </div>
       </div>
+
+      <HelpCenter isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
 
       {/* Standalone Install Guidance Modal */}
       <InstallModal

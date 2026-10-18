@@ -6,9 +6,19 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { env } from './env.ts';
 
 const PREFIX = 'SAFAISEVA1';
-const SECRET = env.qrSigningSecret || 'safaiseva-dev-qr-secret-change-me';
+const DEV_SECRET = 'safaiseva-dev-qr-secret-change-me';
 
-if (!env.qrSigningSecret) {
+// Outside local development a missing secret is a configuration error, not something to
+// paper over with a public default (anyone could then forge tickets) — audit F18.
+function secret(): string {
+  if (env.qrSigningSecret) return env.qrSigningSecret;
+  if (env.nodeEnv === 'development') return DEV_SECRET;
+  const e: any = new Error('Ticket signing is not configured on this server.');
+  e.status = 503;
+  throw e;
+}
+
+if (!env.qrSigningSecret && env.nodeEnv === 'development') {
   console.warn('[qr] QR_SIGNING_SECRET not set — using an insecure dev secret.');
 }
 
@@ -19,16 +29,21 @@ export interface TicketClaims {
   exp: number; // unix seconds
 }
 
+/** Throws (503) when tickets cannot be signed — call before spending credits. */
+export function assertTicketSigningReady(): void {
+  secret();
+}
+
 export function signTicket(claims: TicketClaims): string {
   const body = Buffer.from(JSON.stringify(claims)).toString('base64url');
-  const sig = createHmac('sha256', SECRET).update(body).digest('base64url');
+  const sig = createHmac('sha256', secret()).update(body).digest('base64url');
   return `${PREFIX}.${body}.${sig}`;
 }
 
 export function verifyTicket(token: string): TicketClaims | null {
   const parts = token.split('.');
   if (parts.length !== 3 || parts[0] !== PREFIX) return null;
-  const expected = createHmac('sha256', SECRET).update(parts[1]).digest('base64url');
+  const expected = createHmac('sha256', secret()).update(parts[1]).digest('base64url');
   const a = Buffer.from(expected);
   const b = Buffer.from(parts[2]);
   if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
