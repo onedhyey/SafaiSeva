@@ -8,13 +8,17 @@
 // be a whole city) and an abuser rotates cheap IPs for free. IP is only the last-resort
 // fallback for header-less traffic (which 400/401s downstream anyway).
 //
-// Store is the library default (in-memory): counters are per-process and reset on server
-// restart. Fine for a single-instance pilot; swap in a shared store (Redis) if this is
-// ever run horizontally.
+// Counters for the API limiters live in Supabase (rate_limit_hits, migration 0025) whenever
+// it is configured: the API runs as a Vercel Function, so an in-memory store would only
+// count per instance. Without Supabase (bare local dev) they fall back to the library's
+// in-memory store.
 
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import type { Options, Store, IncrementResponse } from 'express-rate-limit';
 import type { Request, Response } from 'express';
 import { currentIdentityMode } from './principal.ts';
+import { supabaseConfigured } from './env.ts';
+import { admin } from './supabaseAdmin.ts';
 
 // Decode — NOT verify — the `sub` from a Clerk bearer so the bucket key stays stable
 // across the ~60s session-token rotation (keying by the raw token would hand every user a
@@ -56,8 +60,46 @@ function tooMany(_req: Request, res: Response) {
   });
 }
 
-function limiter(windowMs: number, limit: number) {
+// Fixed-window counter shared across instances via one atomic upsert RPC per hit.
+class SupabaseStore implements Store {
+  localKeys = false;
+  prefix: string;
+  private windowMs = 60_000;
+
+  constructor(prefix: string) {
+    this.prefix = prefix;
+  }
+
+  init(options: Options) {
+    this.windowMs = options.windowMs;
+  }
+
+  async increment(key: string): Promise<IncrementResponse> {
+    const { data, error } = await admin().rpc('rate_limit_hit', {
+      p_key: this.prefix + key,
+      p_window_ms: this.windowMs,
+    });
+    if (error) throw new Error(`rate_limit_hit failed: ${error.message}`);
+    const row = Array.isArray(data) ? data[0] : data;
+    return { totalHits: row.hits, resetTime: new Date(row.reset_at) };
+  }
+
+  async decrement(key: string) {
+    await admin().rpc('rate_limit_decrement', { p_key: this.prefix + key });
+  }
+
+  async resetKey(key: string) {
+    await admin().from('rate_limit_hits').delete().eq('key', this.prefix + key);
+  }
+}
+
+// `shared` names the limiter's key prefix in the shared store; omit it to stay in memory.
+function limiter(windowMs: number, limit: number, shared?: string) {
   return rateLimit({
+    ...(shared && supabaseConfigured() ? { store: new SupabaseStore(`${shared}:`) } : {}),
+    // A counter outage must not take the API down with it: let the request through (the
+    // routes' own fraud checks still bound credit outcomes) and log the store error.
+    passOnStoreError: true,
     windowMs,
     limit,
     keyGenerator: identityKey,
@@ -76,19 +118,20 @@ const MIN = 60 * 1000;
 
 // POST /api/handovers/verify — the only Gemini-billed route. A real resident does one
 // handover/day, up to two attempts; 12/hour is generous headroom for retries.
-export const verifyLimiter = limiter(HOUR, 12);
+export const verifyLimiter = limiter(HOUR, 12, 'verify');
 
 // POST /api/uploads/sign — one call per media object (photo + optional video + keyframe
 // per attempt). No model cost but it mints direct-to-Storage upload URLs.
-export const signLimiter = limiter(HOUR, 40);
+export const signLimiter = limiter(HOUR, 40, 'sign');
 
 // The other state-changing POSTs: tickets/redeem, household/bins, handovers/:id/dispute,
 // household/create, household/join, worker/issue, review-queue/:id/decide. Cheap, but far
 // above any human workflow rate (a karmachari clearing a queue makes ~10-20 decisions).
-export const mutationLimiter = limiter(15 * MIN, 30);
+export const mutationLimiter = limiter(15 * MIN, 30, 'mutation');
 
 // GET /api/wallet, GET /api/review-queue — polled by the UI on focus / after actions.
-export const readLimiter = limiter(5 * MIN, 120);
+export const readLimiter = limiter(5 * MIN, 120, 'read');
 
 // POST /api/csp-report — unauthenticated browser reports; bounded so it cannot flood logs.
+// Kept in memory: a per-instance cap is enough here and not worth a DB write per report.
 export const cspReportLimiter = limiter(MIN, 20);

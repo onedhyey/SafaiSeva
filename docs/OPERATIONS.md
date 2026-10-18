@@ -42,7 +42,10 @@ locally and in a container through `server.ts` (`server/app.ts` is shared). The 
 `dist/server.cjs` and its source map into the public site — `build:vercel` no longer does.
 
 Function limits to keep in mind: request bodies ≤ 4.5 MB (evidence goes straight to Supabase
-Storage, so API bodies are small); in-memory rate limits are per instance.
+Storage, so API bodies are small). Rate-limit counters for the API limiters are shared
+across instances in Supabase (`rate_limit_hits`, migration 0025, one atomic upsert per hit);
+only the `/api/csp-report` cap stays in memory per instance. If the counter RPC fails, the
+request is let through and the error logged (`passOnStoreError`).
 
 ## Scheduled jobs
 
