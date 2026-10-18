@@ -178,6 +178,8 @@ export const LoginView: React.FC = () => {
           </button>
         )}
 
+        {/* Local test sign-in only — never with a real Clerk instance. */}
+        {!hasClerkKey && (
         <div className="mt-3 pt-3 border-t border-zinc-800/80 flex items-center justify-between text-[11px] text-zinc-400">
           <span>Testing different users?</span>
           <button
@@ -188,6 +190,7 @@ export const LoginView: React.FC = () => {
             Custom Name Sign-in
           </button>
         </div>
+        )}
       </div>
     </div>
   );

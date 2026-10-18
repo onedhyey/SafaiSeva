@@ -155,6 +155,11 @@ export default function App() {
   // leaderboard are all backend-served now; `src/lib/seed.ts` is only the offline
   // fallback each of those falls back to if its API call fails.
   const loadData = useCallback(async () => {
+    // Signed-in builds: nothing to load until there is a session (it reruns on sign-in).
+    if (authEnabled && !isSignedIn) {
+      setLoading(false);
+      return;
+    }
     try {
       const [hh, hnds, tkts, karm, ward, sett] = await Promise.all([
         getHouseholdProfile(),
@@ -289,7 +294,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [authEnabled, selectedRole]);
+  }, [authEnabled, isSignedIn, selectedRole]);
 
   useEffect(() => {
     loadData();
@@ -392,7 +397,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-ink text-tint flex flex-col items-center justify-center p-4">
         <div className="w-6 h-6 rounded-full border-2 border-green border-t-transparent animate-spin mb-3" />
-        <div className="font-mono text-xs text-muted-l">Loading SafaiSeva AMC Registry...</div>
+        <div className="font-mono text-xs text-muted-l">Loading SafaiSeva…</div>
       </div>
     );
   }
