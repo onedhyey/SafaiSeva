@@ -384,6 +384,18 @@ try {
     eq(body.ledger.ok, true, `ledger ${JSON.stringify(body.ledger)}`);
   });
 
+  await test('rate limits: the 13th verify in an hour is refused, counted in the shared store', async () => {
+    const device = 'ratelimit-device-0001';
+    const statuses = [];
+    for (let i = 0; i < 13; i++) {
+      statuses.push((await s.call('POST', '/api/handovers/verify', { device, body: {} })).status);
+    }
+    assert(statuses.slice(0, 12).every((st) => st !== 429), `first 12 not limited: ${statuses}`);
+    eq(statuses[12], 429, '13th is limited');
+    const row = (await s.db.query(`select hits from public.rate_limit_hits where key = $1`, [`verify:dev:${device}`])).rows[0];
+    eq(row?.hits, 13, 'counter lives in rate_limit_hits, not process memory');
+  });
+
   await test('ledger reconciliation is empty after the whole run', async () => {
     const rows = (await s.db.query(`select * from public.v_ledger_reconciliation`)).rows;
     eq(rows, [], 'reconciliation');
